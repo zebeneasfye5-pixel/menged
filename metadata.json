@@ -1,0 +1,6 @@
+{
+  "name": "መንገድ እና ትራንስፖርት ባለስልጣን | National Transport & Fleet Command",
+  "description": "አጠቃላይ የተሽከርካሪዎች፣ የአሽከርካሪዎች፣ የተራ ቁጥጥር፣ የቀጥታ ጂፒኤስ የጉዞ ክትትል፣ የትራፊክ ደህንነት እና ባለብዙ ቋንቋ ድምፅ ተርጓሚ ስርዓት።",
+  "requestFramePermissions": ["geolocation", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
