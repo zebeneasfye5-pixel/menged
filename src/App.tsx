@@ -16,6 +16,8 @@ import { TrafficSafetyAndTips } from './components/TrafficSafetyAndTips';
 import { VoiceTranslatorIntercom } from './components/VoiceTranslatorIntercom';
 import { PaymentsAndSettlements } from './components/PaymentsAndSettlements';
 import { ExcelReportsModal } from './components/ExcelReportsModal';
+import { SocialShareModal } from './components/SocialShareModal';
+import { SmartContractModal } from './components/SmartContractModal';
 
 import { 
   Driver, 
@@ -39,6 +41,14 @@ export default function App() {
   const [audioAlertsEnabled, setAudioAlertsEnabled] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
+  // Active Role state: user (ተጠቃሚ/መንገደኛ) vs inspector (ተቆጣጣሪ/ባለስልጣን)
+  const [activeRole, setActiveRole] = useState<'user' | 'inspector'>('user');
+
+  // Modals state
+  const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
+  const [contractModalOpen, setContractModalOpen] = useState<boolean>(false);
+  const [emergencyModalOpen, setEmergencyModalOpen] = useState<boolean>(false);
+
   // Persistent state collections from StorageService
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => StorageService.getVehicles());
   const [drivers, setDrivers] = useState<Driver[]>(() => StorageService.getDrivers());
@@ -49,9 +59,6 @@ export default function App() {
   const [payments, setPayments] = useState<PassengerTicketPayment[]>(() => StorageService.getPayments());
   const [exitFees, setExitFees] = useState<TerminalExitFee[]>(() => StorageService.getExitFees());
   const [settlements, setSettlements] = useState<OwnerSettlement[]>(() => StorageService.getSettlements());
-
-  // Emergency SOS Modal
-  const [emergencyModalOpen, setEmergencyModalOpen] = useState<boolean>(false);
 
   // Online / Offline connectivity listener
   useEffect(() => {
@@ -163,13 +170,17 @@ export default function App() {
         setAudioAlertsEnabled={setAudioAlertsEnabled}
         emergencyCount={emergencyCount}
         onTriggerEmergency={handleTriggerEmergency}
+        activeRole={activeRole}
+        onRoleChange={setActiveRole}
+        onOpenShareModal={() => setShareModalOpen(true)}
+        onOpenContractModal={() => setContractModalOpen(true)}
       />
 
       {/* Offline Toast Indicator */}
       {!isOnline && (
         <div className="bg-amber-600 text-white text-xs px-4 py-1.5 flex items-center justify-center gap-2 font-medium">
           <WifiOff className="w-3.5 h-3.5" />
-          <span>ከኔትወርክ ውጪ ነዎት (Offline Mode) — የተቀመጡ መረጃዎች በስልክዎ/ኮምፒውተርዎ ላይ እየሰሩ ናቸው።</span>
+          <span>ከኔትወርክ ውጪ ነዎት (Offline Mode) — የተቀመጡ መረጃዎች በስልክዎ/ኮምፒውተርዎ ላይ ያለምንም ችግር እየሰሩ ናቸው።</span>
         </div>
       )}
 
@@ -183,6 +194,10 @@ export default function App() {
             currentLang={currentLang}
             onNavigateTab={setCurrentTab}
             audioAlertsEnabled={audioAlertsEnabled}
+            activeRole={activeRole}
+            onRoleChange={setActiveRole}
+            onOpenShareModal={() => setShareModalOpen(true)}
+            onOpenContractModal={() => setContractModalOpen(true)}
           />
         )}
 
@@ -280,6 +295,20 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Social Share & Like Modal */}
+      <SocialShareModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        title="የመንገድ እና ትራንስፖርት ባለስልጣን | National Transport & Fleet Command"
+      />
+
+      {/* Smart Contract Agreement Modal */}
+      <SmartContractModal
+        isOpen={contractModalOpen}
+        onClose={() => setContractModalOpen(false)}
+        audioAlertsEnabled={audioAlertsEnabled}
+      />
 
       {/* Emergency SOS Protocol Modal */}
       {emergencyModalOpen && (

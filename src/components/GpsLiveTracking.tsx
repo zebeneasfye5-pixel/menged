@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
   Pause, 
@@ -8,12 +8,16 @@ import {
   Navigation, 
   User, 
   Volume2, 
-  Layers,
-  Info,
-  Radio,
-  Clock,
-  Compass
+  Layers, 
+  Search, 
+  Radio, 
+  Clock, 
+  Compass,
+  MapPin,
+  ExternalLink,
+  Camera
 } from 'lucide-react';
+import L from 'leaflet';
 import { Language, Vehicle } from '../types';
 import { translations } from '../data/translations';
 import { playEmergencySiren, speakText } from '../utils/audio';
@@ -25,39 +29,65 @@ interface GpsLiveTrackingProps {
   audioAlertsEnabled: boolean;
 }
 
-// Major cities for SVG coordinate plotting within Ethiopia boundary
-// Ethiopia rough bounding box: Lat 3.4°N to 14.9°N, Lng 33.0°E to 48.0°E
-// We map this into an SVG viewport 800x600
-function projectLatLngToSvg(lat: number, lng: number): { x: number; y: number } {
-  const minLng = 34.0;
-  const maxLng = 44.5;
-  const minLat = 4.0;
-  const maxLat = 14.5;
-
-  const x = ((lng - minLng) / (maxLng - minLng)) * 740 + 30;
-  const y = 570 - ((lat - minLat) / (maxLat - minLat)) * 540;
-  return { x, y };
-}
-
-interface CityNode {
+// Major cities with real imagery thumbnails & descriptions
+interface CityLandmark {
   name: string;
   nameAm: string;
   lat: number;
   lng: number;
-  isHub?: boolean;
+  imageUrl: string;
+  description: string;
 }
 
-const CITIES: CityNode[] = [
-  { name: 'Addis Ababa', nameAm: 'አዲስ አበባ', lat: 9.02, lng: 38.75, isHub: true },
-  { name: 'Hawassa', nameAm: 'ሀዋሳ', lat: 7.05, lng: 38.47 },
-  { name: 'Adama', nameAm: 'አዳማ', lat: 8.54, lng: 39.27 },
-  { name: 'Bahir Dar', nameAm: 'ባህር ዳር', lat: 11.59, lng: 37.39 },
-  { name: 'Gondar', nameAm: 'ጎንደር', lat: 12.60, lng: 37.46 },
-  { name: 'Mekelle', nameAm: 'መቀሌ', lat: 13.49, lng: 39.47 },
-  { name: 'Dire Dawa', nameAm: 'ድሬዳዋ', lat: 9.59, lng: 41.86 },
-  { name: 'Jimma', nameAm: 'ጅማ', lat: 7.67, lng: 36.83 },
-  { name: 'Dessie', nameAm: 'ደሴ', lat: 11.13, lng: 39.63 },
-  { name: 'Moyale', nameAm: 'ሞያሌ', lat: 3.53, lng: 39.05 },
+const LANDMARKS: CityLandmark[] = [
+  { 
+    name: 'Addis Ababa', 
+    nameAm: 'አዲስ አበባ (ዋና ማዕከል)', 
+    lat: 9.0222, 
+    lng: 38.7468, 
+    imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=400&q=80',
+    description: 'የአፍሪካ ህብረትና የመንገድ ትራንስፖርት ዋና መናኸሪያ'
+  },
+  { 
+    name: 'Hawassa', 
+    nameAm: 'ሀዋሳ (ደቡብ ኮሪደር)', 
+    lat: 7.0504, 
+    lng: 38.4674, 
+    imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=400&q=80',
+    description: 'ሀዋሳ ሐይቅና የኢንዱስትሪ ፓርክ ፈጣን የትራንስፖርት መስመር'
+  },
+  { 
+    name: 'Adama', 
+    nameAm: 'አዳማ / ናዝሬት', 
+    lat: 8.5400, 
+    lng: 39.2700, 
+    imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=400&q=80',
+    description: 'የፈጣን መንገድ (Expressway) ዋና መገናኛ'
+  },
+  { 
+    name: 'Bahir Dar', 
+    nameAm: 'ባህር ዳር (ጣና)', 
+    lat: 11.5940, 
+    lng: 37.3900, 
+    imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
+    description: 'የጣና ሐይቅና ዓባይ ወንዝ መነሻ መስመር'
+  },
+  { 
+    name: 'Dire Dawa', 
+    nameAm: 'ድሬዳዋ / ጅቡቲ መስመር', 
+    lat: 9.5931, 
+    lng: 41.8661, 
+    imageUrl: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=400&q=80',
+    description: 'የምስራቅ ኢትዮጵያና የጅቡቲ ወደብ የንግድ ኮሪደር'
+  },
+  { 
+    name: 'Jimma', 
+    nameAm: 'ጅማ ከተማ', 
+    lat: 7.6734, 
+    lng: 36.8344, 
+    imageUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=400&q=80',
+    description: 'የቡናና የደቡብ ምዕራብ ኢትዮጵያ የትራንስፖርት መስመር'
+  },
 ];
 
 export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
@@ -66,19 +96,174 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
   audioAlertsEnabled,
 }) => {
   const t = translations[currentLang];
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[3]?.id || vehicles[0]?.id || '');
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[0]?.id || '');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [mapLayer, setMapLayer] = useState<'satellite' | 'streets'>('satellite');
   const [isSimulating, setIsSimulating] = useState<boolean>(true);
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1);
-  const [mapLayer, setMapLayer] = useState<'standard' | 'satellite' | 'corridors'>('corridors');
+
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId) || vehicles[0];
 
+  // Filtered vehicles
   const filteredVehicles = vehicles.filter((v) => {
-    if (filterType === 'all') return true;
-    if (filterType === 'overspeed') return v.currentSpeed > v.speedLimit;
-    return v.vehicleType === filterType;
+    const matchesSearch =
+      v.plateNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.driverName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.makeModel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.origin && v.origin.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (v.destination && v.destination.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesType = filterType === 'all' 
+      ? true 
+      : filterType === 'overspeed' 
+      ? v.currentSpeed > v.speedLimit 
+      : v.vehicleType === filterType;
+
+    return matchesSearch && matchesType;
   });
+
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    if (mapInstanceRef.current) return;
+
+    // Center on Ethiopia (Addis Ababa hub)
+    const map = L.map(mapContainerRef.current, {
+      center: [9.02, 38.75],
+      zoom: 6.8,
+      zoomControl: false,
+    });
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // Initial Satellite Tile Layer
+    const tileLayer = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: '&copy; Esri &mdash; National Geographic, GIS User Community',
+        maxZoom: 18,
+      }
+    ).addTo(map);
+
+    tileLayerRef.current = tileLayer;
+
+    // Layer group for markers
+    const markersLayer = L.layerGroup().addTo(map);
+    markersLayerRef.current = markersLayer;
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Switch Map Layer (Satellite vs Street)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !tileLayerRef.current) return;
+
+    mapInstanceRef.current.removeLayer(tileLayerRef.current);
+
+    const newUrl =
+      mapLayer === 'satellite'
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    const newLayer = L.tileLayer(newUrl, {
+      attribution: mapLayer === 'satellite' ? '&copy; Esri World Imagery' : '&copy; OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(mapInstanceRef.current);
+
+    tileLayerRef.current = newLayer;
+  }, [mapLayer]);
+
+  // Update Vehicle Markers on map
+  useEffect(() => {
+    if (!mapInstanceRef.current || !markersLayerRef.current) return;
+
+    markersLayerRef.current.clearLayers();
+
+    // 1. Plot Landmark Pins with photos & names
+    LANDMARKS.forEach((city) => {
+      const landmarkIcon = L.divIcon({
+        className: 'custom-city-pin',
+        html: `
+          <div style="background: rgba(15,23,42,0.85); border: 1.5px solid #10b981; border-radius: 8px; padding: 2px 6px; color: #fff; font-size: 10px; font-weight: bold; white-space: nowrap; box-shadow: 0 4px 6px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 4px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+            <span>${city.nameAm}</span>
+          </div>
+        `,
+        iconSize: [100, 24],
+        iconAnchor: [50, 12],
+      });
+
+      const m = L.marker([city.lat, city.lng], { icon: landmarkIcon });
+      m.bindPopup(`
+        <div style="font-family: sans-serif; font-size: 12px; max-width: 200px;">
+          <img src="${city.imageUrl}" style="width: 100%; height: 90px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" />
+          <strong style="color: #065f46; font-size: 13px;">${city.nameAm}</strong>
+          <p style="margin: 4px 0 0; color: #4b5563; font-size: 11px;">${city.description}</p>
+        </div>
+      `);
+      markersLayerRef.current?.addLayer(m);
+    });
+
+    // 2. Plot Vehicles with real emoji, speed indicator and selection
+    filteredVehicles.forEach((v) => {
+      const isSelected = v.id === selectedVehicleId;
+      const isOverspeed = v.currentSpeed > v.speedLimit;
+
+      const vehicleEmoji =
+        v.vehicleType === 'bajaj'
+          ? '🛺'
+          : v.vehicleType === 'motorcycle'
+          ? '🏍️'
+          : v.vehicleType === 'damas' || v.vehicleType === 'minibus'
+          ? '🚐'
+          : v.vehicleType === 'truck'
+          ? '🚚'
+          : '🚌';
+
+      const bgClr = isOverspeed ? '#dc2626' : isSelected ? '#0284c7' : '#0f172a';
+      const borderClr = isOverspeed ? '#ef4444' : isSelected ? '#38bdf8' : '#10b981';
+
+      const vehIcon = L.divIcon({
+        className: 'custom-veh-marker',
+        html: `
+          <div style="cursor: pointer; transform: ${isSelected ? 'scale(1.2)' : 'scale(1)'}; transition: transform 0.2s;">
+            <div style="background: ${bgClr}; border: 2px solid ${borderClr}; border-radius: 10px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.6); position: relative;">
+              ${vehicleEmoji}
+              ${isOverspeed ? '<span style="position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 1.5px solid #fff;"></span>' : ''}
+            </div>
+            <div style="background: rgba(15,23,42,0.92); color: ${isOverspeed ? '#fca5a5' : '#38bdf8'}; font-family: monospace; font-size: 9px; font-weight: bold; padding: 1px 4px; border-radius: 4px; text-align: center; margin-top: 2px; border: 1px solid rgba(255,255,255,0.1); white-space: nowrap;">
+              ${v.plateNumber.split(' ')[0]} (${v.currentSpeed}k)
+            </div>
+          </div>
+        `,
+        iconSize: [44, 50],
+        iconAnchor: [22, 25],
+      });
+
+      const marker = L.marker([v.lat, v.lng], { icon: vehIcon });
+      marker.on('click', () => {
+        setSelectedVehicleId(v.id);
+        mapInstanceRef.current?.flyTo([v.lat, v.lng], 11, { duration: 1 });
+      });
+
+      markersLayerRef.current?.addLayer(marker);
+    });
+  }, [filteredVehicles, selectedVehicleId]);
+
+  const handleZoomToVehicle = (v: Vehicle) => {
+    setSelectedVehicleId(v.id);
+    mapInstanceRef.current?.flyTo([v.lat, v.lng], 12, { duration: 1.2 });
+  };
 
   const handleVoiceWarningToDriver = (vehicle: Vehicle) => {
     if (audioAlertsEnabled) {
@@ -88,311 +273,100 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
     speakText(warningMsg, 'am');
   };
 
-  // High corridor paths
-  const addis = projectLatLngToSvg(9.02, 38.75);
-  const adama = projectLatLngToSvg(8.54, 39.27);
-  const hawassa = projectLatLngToSvg(7.05, 38.47);
-  const moyale = projectLatLngToSvg(3.53, 39.05);
-  const diredawa = projectLatLngToSvg(9.59, 41.86);
-  const bahirdar = projectLatLngToSvg(11.59, 37.39);
-  const gondar = projectLatLngToSvg(12.60, 37.46);
-  const mekelle = projectLatLngToSvg(13.49, 39.47);
-  const jimma = projectLatLngToSvg(7.67, 36.83);
-  const dessie = projectLatLngToSvg(11.13, 39.63);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Control Banner */}
-      <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <Radio className="w-5 h-5 animate-pulse" />
-            </span>
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                {t.liveTracking} (Live GPS Telemetry & Control)
-                <span className="text-xs font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-700/60">
-                  {vehicles.filter(v => v.status === 'on_route').length} በጉዞ ላይ
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400">
-                የኢትዮጵያ አገር አቀፍ የፍጥነት መቆጣጠሪያ (Speed Limiter) ሳተላይት ማዕከል
-              </p>
-            </div>
+      <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <Radio className="w-5 h-5 animate-pulse" />
+          </span>
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              {t.liveTracking} (Satellite Imagery & Unlimited Fleet Telemetry)
+              <span className="text-xs font-mono bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-700/60">
+                {vehicles.length} ተሽከርካሪዎች በቅኝት ላይ
+              </span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              ትክክለኛውን ቦታ በሳተላይት ምስልና በከተማ ስም የሚያሳይ የቀጥታ የጂፒኤስ ካርታ
+            </p>
           </div>
         </div>
 
-        {/* Controls: Filter & Simulation */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Layer Selector */}
-          <div className="flex items-center bg-slate-900/90 rounded-lg p-1 border border-slate-700 text-xs">
-            <Layers className="w-3.5 h-3.5 text-slate-400 ml-1.5 mr-1" />
-            <button
-              onClick={() => setMapLayer('corridors')}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                mapLayer === 'corridors' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              ኮሪደሮች (Corridors)
-            </button>
+        {/* Controls: Search, Layers & Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search any vehicle or place */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ሰሌዳ፣ ቦታ ወይም አሽከርካሪ..."
+              className="bg-slate-900 border border-slate-700 text-white text-xs rounded-xl pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44"
+            />
+          </div>
+
+          {/* Map Layer Toggle */}
+          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs">
             <button
               onClick={() => setMapLayer('satellite')}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
                 mapLayer === 'satellite' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
               ሳተላይት (Satellite)
             </button>
-          </div>
-
-          {/* Simulation Toggle */}
-          <div className="flex items-center bg-slate-900/90 rounded-lg p-1 border border-slate-700">
             <button
-              onClick={() => setIsSimulating(!isSimulating)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold ${
-                isSimulating ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-300'
+              onClick={() => setMapLayer('streets')}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                mapLayer === 'streets' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
-              {isSimulating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              <span>{isSimulating ? 'ቆም አድርግ' : 'አስጀምር'}</span>
-            </button>
-            <button
-              onClick={() => setSimSpeedMultiplier(m => m === 1 ? 2 : m === 2 ? 5 : 1)}
-              title="Simulation Speed Multiplier"
-              className="flex items-center gap-1 px-2 py-1 text-xs text-amber-300 hover:text-white ml-1 font-mono font-bold"
-            >
-              <FastForward className="w-3.5 h-3.5" />
-              <span>{simSpeedMultiplier}x</span>
+              ጎዳና (Street Map)
             </button>
           </div>
 
-          {/* Filter vehicles */}
+          {/* Vehicle Type Filter */}
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none"
           >
-            <option value="all">ሁሉም ተሽከርካሪዎች ({vehicles.length})</option>
+            <option value="all">ሁሉም ({vehicles.length})</option>
             <option value="overspeed">⚠️ የፍጥነት ወሰን ያለፉ</option>
-            <option value="bus">አውቶቡሶች (Buses)</option>
-            <option value="minibus">ሚኒባሶች (Minibuses)</option>
-            <option value="truck">የጭነት (Heavy Freight)</option>
-            <option value="vip_coach">ቪአይፒ ኮች (VIP Coach)</option>
+            <option value="bajaj">ባጃጅ (Bajaj)</option>
+            <option value="damas">ዳማስ (Damas)</option>
+            <option value="minibus">ሚኒባስ (Minibus)</option>
+            <option value="bus">አውቶቡስ (Buses)</option>
+            <option value="truck">የጭነት (Trucks)</option>
           </select>
         </div>
       </div>
 
-      {/* Main Grid: Interactive GPS Map + Real-time HUD Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Interactive SVG Radar Map View */}
-        <div className="lg:col-span-8 bg-slate-950/80 rounded-2xl border border-slate-800 p-3 sm:p-4 relative shadow-2xl overflow-hidden min-h-[520px] flex flex-col justify-between">
-          {/* Map Grid Pattern background */}
-          <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-40 pointer-events-none" />
+      {/* Main Grid: Interactive Satellite Leaflet Map + HUD */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Real Leaflet Map */}
+        <div className="lg:col-span-8 bg-slate-950 rounded-2xl border border-slate-800 p-2 relative shadow-2xl overflow-hidden min-h-[520px] flex flex-col justify-between">
+          <div 
+            ref={mapContainerRef} 
+            className="w-full h-[520px] rounded-xl z-0 overflow-hidden" 
+          />
 
-          {/* Top Bar HUD indicators */}
-          <div className="relative z-10 flex items-center justify-between pointer-events-none">
-            <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span className="text-xs font-mono text-emerald-400 font-bold">
-                GPS LIVE TELEMETRY: 4G/IRIDIUM MESH
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur px-3 py-1 rounded-lg border border-slate-700/60 text-xs text-slate-300 font-mono">
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span>ኢትዮጵያ (EAST AFRICA TRANSIT)</span>
-            </div>
-          </div>
-
-          {/* SVG Map Canvas */}
-          <div className="relative w-full h-[450px] my-2">
-            <svg viewBox="0 0 800 600" className="w-full h-full select-none">
-              {/* Region Outline hint */}
-              <path
-                d="M 120 180 Q 220 80 400 90 T 580 140 T 730 320 T 680 480 T 480 560 T 320 540 T 140 420 Z"
-                fill="none"
-                stroke="#1e293b"
-                strokeWidth="2"
-                strokeDasharray="4 4"
-              />
-
-              {/* Highway Corridor Paths */}
-              {/* Addis to Hawassa & Moyale */}
-              <line x1={addis.x} y1={addis.y} x2={adama.x} y2={adama.y} stroke="#059669" strokeWidth="4" strokeLinecap="round" opacity="0.8" />
-              <line x1={adama.x} y1={adama.y} x2={hawassa.x} y2={hawassa.y} stroke="#059669" strokeWidth="4" strokeLinecap="round" opacity="0.8" />
-              <line x1={hawassa.x} y1={hawassa.y} x2={moyale.x} y2={moyale.y} stroke="#10b981" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.6" />
-
-              {/* Addis to Dire Dawa (Djibouti Corridor) */}
-              <line x1={adama.x} y1={adama.y} x2={diredawa.x} y2={diredawa.y} stroke="#0284c7" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
-
-              {/* Addis to Bahir Dar & Gondar */}
-              <line x1={addis.x} y1={addis.y} x2={bahirdar.x} y2={bahirdar.y} stroke="#d97706" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
-              <line x1={bahirdar.x} y1={bahirdar.y} x2={gondar.x} y2={gondar.y} stroke="#d97706" strokeWidth="2.5" opacity="0.7" />
-
-              {/* Addis to Dessie & Mekelle */}
-              <line x1={addis.x} y1={addis.y} x2={dessie.x} y2={dessie.y} stroke="#8b5cf6" strokeWidth="3" opacity="0.75" />
-              <line x1={dessie.x} y1={dessie.y} x2={mekelle.x} y2={mekelle.y} stroke="#8b5cf6" strokeWidth="2.5" opacity="0.7" />
-
-              {/* Addis to Jimma */}
-              <line x1={addis.x} y1={addis.y} x2={jimma.x} y2={jimma.y} stroke="#06b6d4" strokeWidth="3" opacity="0.7" />
-
-              {/* City Nodes */}
-              {CITIES.map((city, idx) => {
-                const pos = projectLatLngToSvg(city.lat, city.lng);
-                return (
-                  <g key={idx} className="cursor-pointer group">
-                    <circle
-                      cx={pos.x}
-                      cy={pos.y}
-                      r={city.isHub ? 7 : 4.5}
-                      fill={city.isHub ? '#10b981' : '#38bdf8'}
-                      stroke="#0f172a"
-                      strokeWidth="2"
-                    />
-                    {city.isHub && (
-                      <circle
-                        cx={pos.x}
-                        cy={pos.y}
-                        r="14"
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="1.5"
-                        opacity="0.4"
-                        className="animate-ping"
-                      />
-                    )}
-                    <text
-                      x={pos.x + 9}
-                      y={pos.y + 4}
-                      fill="#e2e8f0"
-                      fontSize={city.isHub ? '12' : '10'}
-                      fontWeight={city.isHub ? 'bold' : 'normal'}
-                      className="font-sans pointer-events-none drop-shadow"
-                    >
-                      {city.nameAm} ({city.name})
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Moving Vehicles Markers */}
-              {filteredVehicles.map((vehicle) => {
-                const pos = projectLatLngToSvg(vehicle.lat, vehicle.lng);
-                const isSelected = selectedVehicle?.id === vehicle.id;
-                const isOverspeed = vehicle.currentSpeed > vehicle.speedLimit;
-
-                return (
-                  <g
-                    key={vehicle.id}
-                    onClick={() => setSelectedVehicleId(vehicle.id)}
-                    className="cursor-pointer transition-all duration-300"
-                  >
-                    {/* Overspeed or selection pulse beacon */}
-                    {isOverspeed && (
-                      <circle
-                        cx={pos.x}
-                        cy={pos.y}
-                        r="22"
-                        fill="#ef4444"
-                        opacity="0.25"
-                        className="animate-ping"
-                      />
-                    )}
-                    {isSelected && (
-                      <circle
-                        cx={pos.x}
-                        cy={pos.y}
-                        r="18"
-                        fill="none"
-                        stroke="#38bdf8"
-                        strokeWidth="2"
-                        strokeDasharray="3 3"
-                        className="animate-spin origin-center"
-                      />
-                    )}
-
-                    {/* Vehicle Pin Icon Box */}
-                    <rect
-                      x={pos.x - 14}
-                      y={pos.y - 14}
-                      width="28"
-                      height="28"
-                      rx="8"
-                      fill={isOverspeed ? '#dc2626' : isSelected ? '#0284c7' : '#1e293b'}
-                      stroke={isOverspeed ? '#fca5a5' : isSelected ? '#38bdf8' : '#475569'}
-                      strokeWidth="2"
-                      className="drop-shadow-lg"
-                    />
-
-                    {/* Simple Vehicle Icon in SVG */}
-                    <text
-                      x={pos.x}
-                      y={pos.y + 4}
-                      fill="#ffffff"
-                      fontSize="11"
-                      textAnchor="middle"
-                      fontWeight="bold"
-                    >
-                      {vehicle.vehicleType === 'truck' ? '🚚' : '🚌'}
-                    </text>
-
-                    {/* Floating Plate Label */}
-                    <rect
-                      x={pos.x - 40}
-                      y={pos.y - 32}
-                      width="80"
-                      height="16"
-                      rx="4"
-                      fill="#0f172a"
-                      opacity="0.92"
-                      stroke={isOverspeed ? '#ef4444' : '#334155'}
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={pos.x}
-                      y={pos.y - 20}
-                      fill={isOverspeed ? '#fca5a5' : '#38bdf8'}
-                      fontSize="9"
-                      fontWeight="bold"
-                      textAnchor="middle"
-                      className="font-mono"
-                    >
-                      {vehicle.plateNumber.split(' ')[0]} ({vehicle.currentSpeed}k)
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-
-          {/* Map Footer: Legend */}
-          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 bg-slate-900/80 backdrop-blur px-3 py-2 rounded-xl border border-slate-800">
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-emerald-500" />
-                <span>መደበኛ ፍጥነት (Normal)</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-red-400 font-semibold">ከፍጥነት ወሰን በላይ (&gt;80 ኪ.ሜ/ሰ)</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-cyan-500" />
-                <span>የተመረጠ (Selected)</span>
-              </span>
-            </div>
-
-            <div className="text-[11px] text-slate-400 font-mono">
-              ጠቅላላ ተሽከርካሪዎች: {vehicles.length} | ሳተላይት ሲግናል: 100%
+          {/* Map floating badges */}
+          <div className="absolute top-4 left-4 z-10 flex items-center gap-2 pointer-events-none">
+            <div className="bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-700/80 pointer-events-auto text-xs font-mono text-emerald-400 font-bold flex items-center gap-2 shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>IRIDIUM / 4G HIGH RESOLUTION GPS MESH</span>
             </div>
           </div>
         </div>
 
         {/* Selected Vehicle HUD Live Panel */}
-        <div className="lg:col-span-4 space-y-4">
+        <div className="lg:col-span-4 space-y-3">
           {selectedVehicle ? (
-            <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-5 shadow-xl space-y-4">
+            <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 shadow-xl space-y-3">
               {/* Header with Plate & Status */}
               <div className="flex items-start justify-between">
                 <div>
@@ -409,7 +383,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                           : 'bg-red-500/20 text-red-300 border-red-500/40'
                       }`}
                     >
-                      {selectedVehicle.status === 'on_route' ? 'በጉዞ ላይ' : selectedVehicle.status === 'in_queue' ? 'በተራ ላይ' : 'የታገደ'}
+                      {selectedVehicle.status === 'on_route' ? 'በጉዞ ላይ' : selectedVehicle.status === 'in_queue' ? 'በተራ ላይ' : 'ዝግጁ'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1 font-medium">
@@ -425,7 +399,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
 
               {/* Speedometer Gauge Widget */}
               <div
-                className={`p-4 rounded-xl border relative overflow-hidden transition-all ${
+                className={`p-3.5 rounded-xl border relative overflow-hidden transition-all ${
                   selectedVehicle.currentSpeed > selectedVehicle.speedLimit
                     ? 'bg-red-950/40 border-red-500/60 shadow-lg shadow-red-950/50'
                     : 'bg-slate-900/90 border-slate-700'
@@ -434,7 +408,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    {t.speed}
+                    <span>ፍጥነት (Speedometer)</span>
                   </span>
                   <span className="text-xs font-mono text-slate-400">
                     ወሰን: {selectedVehicle.speedLimit} ኪ.ሜ/ሰ
@@ -444,7 +418,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                 <div className="flex items-baseline justify-between">
                   <div className="flex items-baseline gap-1">
                     <span
-                      className={`text-4xl font-extrabold font-mono tracking-tight ${
+                      className={`text-3xl font-extrabold font-mono tracking-tight ${
                         selectedVehicle.currentSpeed > selectedVehicle.speedLimit
                           ? 'text-red-400 animate-pulse'
                           : 'text-emerald-400'
@@ -463,8 +437,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                   )}
                 </div>
 
-                {/* Speed progress meter */}
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
                   <div
                     className={`h-full transition-all duration-500 ${
                       selectedVehicle.currentSpeed > selectedVehicle.speedLimit
@@ -478,23 +451,25 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                 </div>
               </div>
 
-              {/* Voice Warning Button for Authority Dispatcher */}
+              {/* Action: Voice Warning to Driver */}
               <button
                 onClick={() => handleVoiceWarningToDriver(selectedVehicle)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition-transform active:scale-95"
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow transition-transform active:scale-95"
               >
                 <Volume2 className="w-4 h-4 animate-pulse" />
-                <span>ለአሽከርካሪው የድምፅ ማስጠንቀቂያ አሰማ (Voice Chime & Alert)</span>
+                <span>ለአሽከርካሪው የድምፅ ማስጠንቀቂያ አሰማ (Voice Alert)</span>
               </button>
 
               {/* Trip Route & Corridors */}
-              <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/60 space-y-2 text-xs">
-                <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-1.5">
+              <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/60 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-1">
                   <span className="flex items-center gap-1 text-slate-300">
                     <Navigation className="w-3.5 h-3.5 text-emerald-400" />
                     <span>የጉዞ መስመር</span>
                   </span>
-                  <span className="font-semibold text-emerald-400">{selectedVehicle.routeName || 'አገር አቀፍ መስመር'}</span>
+                  <span className="font-semibold text-emerald-400 truncate max-w-[140px]">
+                    {selectedVehicle.routeName || 'አገር አቀፍ መስመር'}
+                  </span>
                 </div>
 
                 <div className="flex justify-between items-center text-slate-300 pt-0.5">
@@ -502,21 +477,20 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                     <span className="text-[10px] text-slate-400 block">መነሻ</span>
                     <span className="font-semibold">{selectedVehicle.origin || 'አዲስ አበባ'}</span>
                   </div>
-                  <div className="text-center px-2">
+                  <div className="text-center px-1">
                     <span className="text-slate-500">➔</span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] text-slate-400 block">መዳረሻ</span>
-                    <span className="font-semibold">{selectedVehicle.destination || 'ሀዋሳ'}</span>
+                    <span className="font-semibold">{selectedVehicle.destination || 'ክፍት'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Driver & Telemetry Specs */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* Driver Box */}
-                <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/60">
-                  <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                <div className="bg-slate-900/80 rounded-xl p-2.5 border border-slate-700/60">
+                  <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
                     <User className="w-3.5 h-3.5 text-amber-400" />
                     <span>አሽከርካሪ</span>
                   </div>
@@ -524,62 +498,40 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                   <p className="text-[11px] font-mono text-slate-400">{selectedVehicle.driverPhone}</p>
                 </div>
 
-                {/* Fuel Level */}
-                <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/60">
-                  <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                <div className="bg-slate-900/80 rounded-xl p-2.5 border border-slate-700/60">
+                  <div className="flex items-center gap-1.5 text-slate-400 mb-0.5">
                     <Fuel className="w-3.5 h-3.5 text-cyan-400" />
                     <span>{t.fuel}</span>
                   </div>
                   <div className="flex items-baseline gap-1">
-                    <span className="font-bold text-slate-100 text-base">{selectedVehicle.fuelLevel}%</span>
+                    <span className="font-bold text-slate-100 text-sm">{selectedVehicle.fuelLevel}%</span>
                     <span className="text-[10px] text-slate-400">ታንክ</span>
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
-                    <div
-                      className="bg-cyan-400 h-full rounded-full"
-                      style={{ width: `${selectedVehicle.fuelLevel}%` }}
-                    />
-                  </div>
                 </div>
               </div>
 
-              {/* Technical Inspection & Device ID */}
-              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-1.5 text-xs text-slate-400 font-mono">
-                <div className="flex justify-between">
-                  <span>GPS Tracker ID:</span>
-                  <span className="text-slate-200">{selectedVehicle.speedLimiterId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>የቴክኒክ ምርመራ:</span>
-                  <span className={selectedVehicle.inspectionStatus === 'passed' ? 'text-emerald-400' : 'text-amber-400'}>
-                    {selectedVehicle.inspectionStatus === 'passed' ? 'ብቁ (Passed)' : 'ማስጠንቀቂያ (Warning)'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>የባለቤት ማህበር:</span>
-                  <span className="text-slate-200 truncate max-w-[160px]">{selectedVehicle.ownerName}</span>
-                </div>
+              {/* Exact GPS Coordinates */}
+              <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800 text-[11px] text-slate-400 font-mono flex items-center justify-between">
+                <span>ትክክለኛ ኬክሮስ/ኬንትሮስ:</span>
+                <span className="text-emerald-400 font-bold">
+                  {selectedVehicle.lat.toFixed(4)}°N, {selectedVehicle.lng.toFixed(4)}°E
+                </span>
               </div>
             </div>
-          ) : (
-            <div className="bg-slate-800 rounded-2xl p-6 text-center text-slate-400 border border-slate-700">
-              <Info className="w-8 h-8 mx-auto mb-2 text-slate-500" />
-              <p>ተሽከርካሪ በመምረጥ የቀጥታ ቴሌሜትሪ ይመልከቱ።</p>
-            </div>
-          )}
+          ) : null}
 
-          {/* Quick list of other active vehicles on the road */}
-          <div className="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-4 shadow-lg space-y-2">
+          {/* Quick Click-to-Zoom List for all vehicles */}
+          <div className="bg-slate-800/80 rounded-2xl border border-slate-700/80 p-3 shadow-lg space-y-2">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-              <span>በጉዞ ላይ ያሉ ተሽከርካሪዎች</span>
-              <span className="text-[11px] font-mono text-slate-400">{filteredVehicles.length} ጠቅላላ</span>
+              <span>በቅኝት ላይ ያሉ ተሽከርካሪዎች ({filteredVehicles.length})</span>
+              <span className="text-[10px] text-emerald-400 font-mono">ካርታው ላይ ጠቅ ያድርጉ</span>
             </h3>
 
-            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
               {filteredVehicles.map((v) => (
                 <div
                   key={v.id}
-                  onClick={() => setSelectedVehicleId(v.id)}
+                  onClick={() => handleZoomToVehicle(v)}
                   className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors border ${
                     selectedVehicleId === v.id
                       ? 'bg-slate-700/90 border-emerald-500/80 text-white'
@@ -587,11 +539,24 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-amber-300">{v.plateNumber}</span>
-                    <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{v.routeName || v.destination}</span>
+                    <span>
+                      {v.vehicleType === 'bajaj'
+                        ? '🛺'
+                        : v.vehicleType === 'motorcycle'
+                        ? '🏍️'
+                        : v.vehicleType === 'damas' || v.vehicleType === 'minibus'
+                        ? '🚐'
+                        : v.vehicleType === 'truck'
+                        ? '🚚'
+                        : '🚌'}
+                    </span>
+                    <div>
+                      <span className="font-mono font-bold text-amber-300">{v.plateNumber}</span>
+                      <p className="text-[10px] text-slate-400 truncate max-w-[110px]">{v.origin || v.destination}</p>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 font-mono">
+                  <div className="flex items-center gap-1.5 font-mono">
                     <span
                       className={`font-bold ${
                         v.currentSpeed > v.speedLimit ? 'text-red-400 animate-pulse' : 'text-emerald-400'
@@ -599,7 +564,7 @@ export const GpsLiveTracking: React.FC<GpsLiveTrackingProps> = ({
                     >
                       {v.currentSpeed} km/h
                     </span>
-                    {v.currentSpeed > v.speedLimit && <AlertTriangle className="w-3.5 h-3.5 text-red-400" />}
+                    <MapPin className="w-3.5 h-3.5 text-cyan-400" />
                   </div>
                 </div>
               ))}

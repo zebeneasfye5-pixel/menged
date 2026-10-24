@@ -16,15 +16,19 @@ import {
   Mic2, 
   Activity,
   CreditCard,
-  Download,
   Smartphone,
   RotateCcw,
   Menu,
-  X
+  X,
+  Heart,
+  Share2,
+  FileCheck2,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
 import { Language } from '../types';
 import { translations } from '../data/translations';
-import { playEmergencySiren } from '../utils/audio';
+import { playEmergencySiren, speakText } from '../utils/audio';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { StorageService } from '../utils/storage';
 
@@ -37,6 +41,10 @@ interface NavbarProps {
   setAudioAlertsEnabled: (enabled: boolean) => void;
   emergencyCount: number;
   onTriggerEmergency: () => void;
+  activeRole?: 'user' | 'inspector';
+  onRoleChange?: (role: 'user' | 'inspector') => void;
+  onOpenShareModal?: () => void;
+  onOpenContractModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -48,11 +56,49 @@ export const Navbar: React.FC<NavbarProps> = ({
   setAudioAlertsEnabled,
   emergencyCount,
   onTriggerEmergency,
+  activeRole = 'user',
+  onRoleChange,
+  onOpenShareModal,
+  onOpenContractModal,
 }) => {
   const t = translations[currentLang];
   const [currentTime, setCurrentTime] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+
+  // Like system state in Navbar
+  const [likeCount, setLikeCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('transport_et_likes');
+      return saved ? parseInt(saved, 10) : 1482;
+    }
+    return 1482;
+  });
+  const [hasLiked, setHasLiked] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('transport_et_user_has_liked') === 'true';
+    }
+    return false;
+  });
+
+  const handleToggleLike = () => {
+    if (hasLiked) {
+      const next = Math.max(0, likeCount - 1);
+      setLikeCount(next);
+      setHasLiked(false);
+      localStorage.setItem('transport_et_likes', next.toString());
+      localStorage.setItem('transport_et_user_has_liked', 'false');
+    } else {
+      const next = likeCount + 1;
+      setLikeCount(next);
+      setHasLiked(true);
+      localStorage.setItem('transport_et_likes', next.toString());
+      localStorage.setItem('transport_et_user_has_liked', 'true');
+      if (audioAlertsEnabled) {
+        speakText('እናመሰግናለን! ስርዓቱን ወደዱት!', 'am');
+      }
+    }
+  };
 
   // PWA install hook
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -109,8 +155,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleInstallClick = async () => {
     if (isInstallable) {
       await install();
-    } else if (isIOS) {
-      setShowIOSGuide(true);
     } else {
       setShowIOSGuide(true);
     }
@@ -124,26 +168,87 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-white shadow-xl">
-      {/* Top Banner Bar */}
+      {/* Top Banner Bar: Status, Role switcher, Likes, Share, Contract & Clock */}
       <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-amber-950 px-4 py-1.5 text-xs border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-emerald-400 font-medium">
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="truncate">የብሔራዊ ትራንስፖርት፣ የጂፒኤስ፣ የተራና ክፍያ የቀጥታ የቁጥጥር መስመር (Active Live Production)</span>
+          <span className="truncate">የመንገድና ትራንስፖርት የቀጥታ የቁጥጥር መስመር (Active Live Production)</span>
         </div>
 
-        <div className="flex items-center gap-3 text-slate-300">
+        <div className="flex items-center gap-2 sm:gap-3 text-slate-300">
+          {/* Dashboard Mode Switcher */}
+          {onRoleChange && (
+            <div className="hidden md:flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-[11px]">
+              <button
+                onClick={() => onRoleChange('user')}
+                className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                  activeRole === 'user' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ተጠቃሚ
+              </button>
+              <button
+                onClick={() => onRoleChange('inspector')}
+                className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                  activeRole === 'inspector' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ተቆጣጣሪ
+              </button>
+            </div>
+          )}
+
+          {/* Smart Contract Quick Button */}
+          {onOpenContractModal && (
+            <button
+              onClick={onOpenContractModal}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold hover:bg-amber-500/30 transition-all"
+              title="የተቋሙና የገንቢው ስማርት ውል"
+            >
+              <FileCheck2 className="w-3 h-3" />
+              <span className="hidden sm:inline">ውል (Contract)</span>
+            </button>
+          )}
+
+          {/* Fast Like Button */}
+          <button
+            onClick={handleToggleLike}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all border ${
+              hasLiked
+                ? 'bg-rose-600 text-white border-rose-500'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-rose-400'
+            }`}
+            title="ላይክ አድርግ"
+          >
+            <Heart className={`w-3 h-3 ${hasLiked ? 'fill-white text-white' : 'text-rose-400'}`} />
+            <span className="font-mono text-[10px]">{likeCount}</span>
+          </button>
+
+          {/* Fast Share Button */}
+          {onOpenShareModal && (
+            <button
+              onClick={onOpenShareModal}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-bold transition-all"
+              title="ሸር / አጋራ"
+            >
+              <Share2 className="w-3 h-3 text-emerald-400" />
+              <span className="hidden sm:inline">ሸር</span>
+            </button>
+          )}
+
           {/* PWA Phone Install Button */}
           {!isInstalled && (
             <button
               onClick={handleInstallClick}
-              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold text-[11px] shadow border border-cyan-400/50 transition-all active:scale-95"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold text-[11px] shadow border border-cyan-400/50 transition-all active:scale-95"
               title="በማንኛውም ስልክ ላይ አፑን ጫን"
             >
-              <Smartphone className="w-3 h-3 animate-bounce" />
-              <span>{t.installApp}</span>
+              <Smartphone className="w-3 h-3" />
+              <span className="hidden sm:inline">{t.installApp}</span>
+              <span className="sm:hidden">ጫን</span>
             </button>
           )}
 
@@ -154,10 +259,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="መረጃ ወደ መጀመሪያው ይዘት መልስ"
           >
             <RotateCcw className="w-3 h-3" />
-            <span className="hidden sm:inline">Reset</span>
+            <span className="hidden lg:inline">Reset</span>
           </button>
 
-          <span className="hidden md:inline font-mono bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+          <span className="hidden lg:inline font-mono bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
             {currentTime}
           </span>
 
@@ -274,7 +379,36 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Drawer Navigation */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-3 space-y-1">
+        <div className="lg:hidden bg-slate-900 border-b border-slate-800 px-4 py-3 space-y-2">
+          {/* Mobile Role Switcher */}
+          {onRoleChange && (
+            <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700 text-xs">
+              <button
+                onClick={() => {
+                  onRoleChange('user');
+                  setMobileMenuOpen(false);
+                }}
+                className={`flex-1 py-1.5 rounded-lg font-bold text-center ${
+                  activeRole === 'user' ? 'bg-emerald-600 text-white' : 'text-slate-400'
+                }`}
+              >
+                የተጠቃሚ ዳሽቦርድ
+              </button>
+              <button
+                onClick={() => {
+                  onRoleChange('inspector');
+                  setMobileMenuOpen(false);
+                }}
+                className={`flex-1 py-1.5 rounded-lg font-bold text-center ${
+                  activeRole === 'inspector' ? 'bg-cyan-600 text-white' : 'text-slate-400'
+                }`}
+              >
+                የተቆጣጣሪ ዳሽቦርድ
+              </button>
+            </div>
+          )}
+
+          {/* Nav Items */}
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
