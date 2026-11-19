@@ -1,0 +1,719 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Reusable Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified() && request.auth.token.email == 'zebeneasfye5@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOwnerUid(uid) {
+      return isVerified() && request.auth.uid == uid;
+    }
+
+    // Validation Helpers
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'preferredRole', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'preferredRole', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isValidStr(data.displayName, 1, 120)
+        && (data.preferredRole == 'user' || data.preferredRole == 'inspector')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedAt'])
+        && isValidId(data.uid)
+        && isValidStr(data.email, 3, 160)
+        && data.grantedAt is timestamp;
+    }
+
+    function isValidVehicle(data) {
+      return data.keys().hasAll(['id', 'plateNumber', 'vehicleType', 'makeModel', 'status', 'lat', 'lng', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'plateNumber', 'vehicleType', 'makeModel', 'year', 'capacity',
+          'ownerId', 'ownerName', 'driverId', 'driverName', 'driverPhone',
+          'speedLimiterId', 'status', 'inspectionStatus', 'inspectionExpiry',
+          'fuelLevel', 'currentSpeed', 'speedLimit', 'lat', 'lng', 'heading',
+          'currentLocationName', 'currentLocationImage', 'origin', 'destination',
+          'routeId', 'routeName', 'lastUpdate', 'visibility', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.plateNumber, 1, 40)
+        && isValidStr(data.vehicleType, 1, 40)
+        && isValidStr(data.makeModel, 1, 120)
+        && data.status in ['active', 'on_route', 'in_queue', 'maintenance', 'suspended']
+        && data.lat is number && data.lat >= -90 && data.lat <= 90
+        && data.lng is number && data.lng >= -180 && data.lng <= 180
+        && data.visibility in ['public', 'private']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('year' in data) || (data.year is number && data.year >= 1950 && data.year <= 2100))
+        && (!('capacity' in data) || (data.capacity is number && data.capacity >= 0 && data.capacity <= 500))
+        && (!('ownerId' in data) || isValidStr(data.ownerId, 0, 128))
+        && (!('ownerName' in data) || isValidStr(data.ownerName, 0, 160))
+        && (!('driverId' in data) || isValidStr(data.driverId, 0, 128))
+        && (!('driverName' in data) || isValidStr(data.driverName, 0, 120))
+        && (!('driverPhone' in data) || isValidStr(data.driverPhone, 0, 40))
+        && (!('speedLimiterId' in data) || isValidStr(data.speedLimiterId, 0, 64))
+        && (!('inspectionStatus' in data) || data.inspectionStatus in ['passed', 'warning', 'expired'])
+        && (!('inspectionExpiry' in data) || isValidStr(data.inspectionExpiry, 0, 40))
+        && (!('fuelLevel' in data) || (data.fuelLevel is number && data.fuelLevel >= 0 && data.fuelLevel <= 100))
+        && (!('currentSpeed' in data) || (data.currentSpeed is number && data.currentSpeed >= 0 && data.currentSpeed <= 300))
+        && (!('speedLimit' in data) || (data.speedLimit is number && data.speedLimit >= 10 && data.speedLimit <= 200))
+        && (!('heading' in data) || (data.heading is number && data.heading >= 0 && data.heading <= 360))
+        && (!('currentLocationName' in data) || isValidStr(data.currentLocationName, 0, 200))
+        && (!('currentLocationImage' in data) || isValidStr(data.currentLocationImage, 0, 500))
+        && (!('origin' in data) || isValidStr(data.origin, 0, 160))
+        && (!('destination' in data) || isValidStr(data.destination, 0, 160))
+        && (!('routeId' in data) || isValidStr(data.routeId, 0, 128))
+        && (!('routeName' in data) || isValidStr(data.routeName, 0, 200))
+        && (!('lastUpdate' in data) || isValidStr(data.lastUpdate, 0, 64));
+    }
+
+    function isValidDriver(data) {
+      return data.keys().hasAll(['id', 'fullName', 'licenseNumber', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'fullName', 'licenseNumber', 'licenseGrade', 'phone',
+          'experienceYears', 'rating', 'status', 'penaltyPoints',
+          'assignedPlate', 'avatarUrl', 'healthCertExpiry',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.fullName, 1, 120)
+        && isValidStr(data.licenseNumber, 1, 64)
+        && data.status in ['active', 'on_route', 'resting', 'suspended']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('licenseGrade' in data) || isValidStr(data.licenseGrade, 0, 80))
+        && (!('phone' in data) || isValidStr(data.phone, 0, 40))
+        && (!('experienceYears' in data) || (data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80))
+        && (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5))
+        && (!('penaltyPoints' in data) || (data.penaltyPoints is number && data.penaltyPoints >= 0 && data.penaltyPoints <= 1000))
+        && (!('assignedPlate' in data) || isValidStr(data.assignedPlate, 0, 40))
+        && (!('avatarUrl' in data) || isValidStr(data.avatarUrl, 0, 500))
+        && (!('healthCertExpiry' in data) || isValidStr(data.healthCertExpiry, 0, 40));
+    }
+
+    function isValidOwner(data) {
+      return data.keys().hasAll(['id', 'name', 'type', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'name', 'type', 'tin', 'phone', 'email', 'city',
+          'bankName', 'bankAccountNo', 'telebirrPhone',
+          'vehiclesCount', 'activeVehicles', 'fleetRevenueEtb',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.name, 1, 160)
+        && data.type in ['association', 'company', 'individual', 'cooperative']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('tin' in data) || isValidStr(data.tin, 0, 40))
+        && (!('phone' in data) || isValidStr(data.phone, 0, 40))
+        && (!('email' in data) || isValidStr(data.email, 0, 120))
+        && (!('city' in data) || isValidStr(data.city, 0, 80))
+        && (!('bankName' in data) || isValidStr(data.bankName, 0, 80))
+        && (!('bankAccountNo' in data) || isValidStr(data.bankAccountNo, 0, 64))
+        && (!('telebirrPhone' in data) || isValidStr(data.telebirrPhone, 0, 40))
+        && (!('vehiclesCount' in data) || data.vehiclesCount is number)
+        && (!('activeVehicles' in data) || data.activeVehicles is number)
+        && (!('fleetRevenueEtb' in data) || data.fleetRevenueEtb is number);
+    }
+
+    function isValidQueue(data) {
+      return data.keys().hasAll(['id', 'terminalName', 'routeName', 'plateNumber', 'turnNumber', 'status', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'terminalId', 'terminalName', 'routeId', 'routeName',
+          'vehicleId', 'plateNumber', 'vehicleType', 'driverName', 'driverPhone',
+          'turnNumber', 'entryTime', 'estimatedDeparture', 'status',
+          'capacity', 'bookedSeats', 'ticketCode', 'tariffPerSeat',
+          'exitFeePaid', 'totalCollectedEtb', 'visibility',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.terminalName, 1, 160)
+        && isValidStr(data.routeName, 1, 160)
+        && isValidStr(data.plateNumber, 1, 40)
+        && data.turnNumber is number && data.turnNumber >= 0 && data.turnNumber <= 10000
+        && data.status in ['waiting', 'calling', 'boarding', 'dispatched', 'cancelled']
+        && data.visibility in ['public', 'private']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('terminalId' in data) || isValidStr(data.terminalId, 0, 80))
+        && (!('routeId' in data) || isValidStr(data.routeId, 0, 80))
+        && (!('vehicleId' in data) || isValidStr(data.vehicleId, 0, 80))
+        && (!('vehicleType' in data) || isValidStr(data.vehicleType, 0, 40))
+        && (!('driverName' in data) || isValidStr(data.driverName, 0, 120))
+        && (!('driverPhone' in data) || isValidStr(data.driverPhone, 0, 40))
+        && (!('entryTime' in data) || isValidStr(data.entryTime, 0, 40))
+        && (!('estimatedDeparture' in data) || isValidStr(data.estimatedDeparture, 0, 40))
+        && (!('capacity' in data) || data.capacity is number)
+        && (!('bookedSeats' in data) || data.bookedSeats is number)
+        && (!('ticketCode' in data) || isValidStr(data.ticketCode, 0, 64))
+        && (!('tariffPerSeat' in data) || data.tariffPerSeat is number)
+        && (!('exitFeePaid' in data) || data.exitFeePaid is bool)
+        && (!('totalCollectedEtb' in data) || data.totalCollectedEtb is number);
+    }
+
+    function isValidRoute(data) {
+      return data.keys().hasAll(['id', 'name', 'origin', 'destination', 'standardTariffBirr', 'visibility', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'code', 'name', 'origin', 'destination',
+          'distanceKm', 'standardTariffBirr', 'estimatedHours',
+          'checkpointsCount', 'tollFee', 'roadQuality',
+          'visibility', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.name, 1, 160)
+        && isValidStr(data.origin, 1, 160)
+        && isValidStr(data.destination, 1, 160)
+        && data.standardTariffBirr is number && data.standardTariffBirr >= 0
+        && data.visibility in ['public', 'private']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('code' in data) || isValidStr(data.code, 0, 40))
+        && (!('distanceKm' in data) || data.distanceKm is number)
+        && (!('estimatedHours' in data) || data.estimatedHours is number)
+        && (!('checkpointsCount' in data) || data.checkpointsCount is number)
+        && (!('tollFee' in data) || data.tollFee is number)
+        && (!('roadQuality' in data) || data.roadQuality in ['expressway', 'asphalt_good', 'mountain_corridor', 'gravel']);
+    }
+
+    function isValidSafetyReport(data) {
+      return data.keys().hasAll(['id', 'trackingNumber', 'vehiclePlate', 'incidentType', 'severity', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'trackingNumber', 'vehiclePlate', 'reportedBy', 'reporterPhone',
+          'incidentType', 'severity', 'timestamp', 'location', 'description',
+          'hasAudio', 'audioNoteDuration', 'photoUrl', 'status',
+          'speedRecorded', 'actionTaken', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.trackingNumber, 1, 64)
+        && isValidStr(data.vehiclePlate, 1, 40)
+        && data.incidentType in ['overspeed', 'overloading', 'reckless_driving', 'tariff_extortion', 'accident', 'mechanical_issue']
+        && data.severity in ['low', 'medium', 'high', 'critical']
+        && data.status in ['pending', 'under_investigation', 'resolved', 'fine_issued']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('reportedBy' in data) || isValidStr(data.reportedBy, 0, 120))
+        && (!('reporterPhone' in data) || isValidStr(data.reporterPhone, 0, 40))
+        && (!('timestamp' in data) || isValidStr(data.timestamp, 0, 64))
+        && (!('location' in data) || isValidStr(data.location, 0, 200))
+        && (!('description' in data) || isValidStr(data.description, 0, 1500))
+        && (!('hasAudio' in data) || data.hasAudio is bool)
+        && (!('audioNoteDuration' in data) || isValidStr(data.audioNoteDuration, 0, 20))
+        && (!('photoUrl' in data) || isValidStr(data.photoUrl, 0, 500))
+        && (!('speedRecorded' in data) || data.speedRecorded is number)
+        && (!('actionTaken' in data) || isValidStr(data.actionTaken, 0, 600));
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['id', 'ticketNumber', 'vehiclePlate', 'amountBirr', 'paymentStatus', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'ticketNumber', 'passengerName', 'passengerPhone',
+          'vehiclePlate', 'routeName', 'seatNumber', 'amountBirr',
+          'paymentMethod', 'paymentRefNumber', 'paymentStatus', 'issuedAt',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.ticketNumber, 1, 64)
+        && isValidStr(data.vehiclePlate, 1, 40)
+        && data.amountBirr is number && data.amountBirr >= 0
+        && data.paymentStatus in ['completed', 'pending', 'refunded']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('passengerName' in data) || isValidStr(data.passengerName, 0, 120))
+        && (!('passengerPhone' in data) || isValidStr(data.passengerPhone, 0, 40))
+        && (!('routeName' in data) || isValidStr(data.routeName, 0, 160))
+        && (!('seatNumber' in data) || data.seatNumber is number)
+        && (!('paymentMethod' in data) || data.paymentMethod in ['telebirr', 'cbe_birr', 'mpesa', 'amole', 'cash', 'bank_transfer'])
+        && (!('paymentRefNumber' in data) || isValidStr(data.paymentRefNumber, 0, 80))
+        && (!('issuedAt' in data) || isValidStr(data.issuedAt, 0, 64));
+    }
+
+    function isValidExitFee(data) {
+      return data.keys().hasAll(['id', 'vehiclePlate', 'feeAmountBirr', 'receiptNumber', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'queueTurnId', 'vehiclePlate', 'vehicleType', 'ownerName',
+          'driverName', 'routeName', 'feeAmountBirr', 'paymentMethod',
+          'paymentRef', 'receiptNumber', 'dispatchedAt', 'clearedByInspector',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.vehiclePlate, 1, 40)
+        && data.feeAmountBirr is number && data.feeAmountBirr >= 0
+        && isValidStr(data.receiptNumber, 1, 80)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('queueTurnId' in data) || isValidStr(data.queueTurnId, 0, 80))
+        && (!('vehicleType' in data) || isValidStr(data.vehicleType, 0, 40))
+        && (!('ownerName' in data) || isValidStr(data.ownerName, 0, 160))
+        && (!('driverName' in data) || isValidStr(data.driverName, 0, 120))
+        && (!('routeName' in data) || isValidStr(data.routeName, 0, 160))
+        && (!('paymentMethod' in data) || data.paymentMethod in ['telebirr', 'cbe_birr', 'cash', 'bank_transfer'])
+        && (!('paymentRef' in data) || isValidStr(data.paymentRef, 0, 80))
+        && (!('dispatchedAt' in data) || isValidStr(data.dispatchedAt, 0, 64))
+        && (!('clearedByInspector' in data) || isValidStr(data.clearedByInspector, 0, 120));
+    }
+
+    function isValidSettlement(data) {
+      return data.keys().hasAll(['id', 'settlementNumber', 'ownerName', 'vehiclePlate', 'netPayoutToOwnerBirr', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'settlementNumber', 'ownerId', 'ownerName', 'vehiclePlate',
+          'routeName', 'periodDate', 'totalPassengersCount', 'grossFaresCollectedBirr',
+          'terminalServiceFeeDeductedBirr', 'associationCommissionBirr', 'netPayoutToOwnerBirr',
+          'payoutMethod', 'payoutAccountOrPhone', 'transactionRef', 'status',
+          'handedOverBy', 'receivedBy', 'settledAt',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.settlementNumber, 1, 64)
+        && isValidStr(data.ownerName, 1, 160)
+        && isValidStr(data.vehiclePlate, 1, 40)
+        && data.netPayoutToOwnerBirr is number && data.netPayoutToOwnerBirr >= 0
+        && data.status in ['paid', 'pending_handover', 'disputed']
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('ownerId' in data) || isValidStr(data.ownerId, 0, 80))
+        && (!('routeName' in data) || isValidStr(data.routeName, 0, 160))
+        && (!('periodDate' in data) || isValidStr(data.periodDate, 0, 40))
+        && (!('totalPassengersCount' in data) || data.totalPassengersCount is number)
+        && (!('grossFaresCollectedBirr' in data) || data.grossFaresCollectedBirr is number)
+        && (!('terminalServiceFeeDeductedBirr' in data) || data.terminalServiceFeeDeductedBirr is number)
+        && (!('associationCommissionBirr' in data) || data.associationCommissionBirr is number)
+        && (!('payoutMethod' in data) || data.payoutMethod in ['telebirr', 'bank_account', 'cbe_birr', 'cash_handover'])
+        && (!('payoutAccountOrPhone' in data) || isValidStr(data.payoutAccountOrPhone, 0, 80))
+        && (!('transactionRef' in data) || isValidStr(data.transactionRef, 0, 80))
+        && (!('handedOverBy' in data) || isValidStr(data.handedOverBy, 0, 120))
+        && (!('receivedBy' in data) || isValidStr(data.receivedBy, 0, 120))
+        && (!('settledAt' in data) || isValidStr(data.settledAt, 0, 64));
+    }
+
+    function isValidContract(data) {
+      return data.keys().hasAll(['id', 'developerName', 'authorityOfficial', 'isSigned', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'developerName', 'authorityOfficial', 'contractDate',
+          'contractValueBirr', 'warrantyMonths', 'isSigned',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.developerName, 1, 160)
+        && isValidStr(data.authorityOfficial, 1, 160)
+        && data.isSigned is bool
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('contractDate' in data) || isValidStr(data.contractDate, 0, 40))
+        && (!('contractValueBirr' in data) || data.contractValueBirr is number)
+        && (!('warrantyMonths' in data) || data.warrantyMonths is number);
+    }
+
+    function isValidEngagement(data) {
+      return data.keys().hasAll(['id', 'likeCount', 'visibility', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'likeCount', 'visibility', 'updatedBy', 'updatedAt'])
+        && isValidId(data.id)
+        && data.likeCount is number && data.likeCount >= 0
+        && data.visibility == 'public'
+        && isValidId(data.updatedBy)
+        && data.updatedAt is timestamp;
+    }
+
+    // Health Connection Check Document
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+
+    // Users Collection (PII isolated to owner or admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwnerUid(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isOwnerUid(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().preferredRole == 'user'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (isOwnerUid(userId) || isAdmin())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']))
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Admins Allowlist (Read/Write restricted to admins)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwnerUid(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(adminId)
+        && isAdmin()
+        && isValidAdminRecord(incoming())
+        && incoming().grantedAt == request.time;
+      allow update: if isValidId(adminId)
+        && isAdmin()
+        && isValidAdminRecord(incoming())
+        && incoming().uid == existing().uid
+        && incoming().grantedAt == existing().grantedAt;
+      allow delete: if isValidId(adminId) && isAdmin();
+    }
+
+    // Public-Operational Fleet Vehicles
+    match /vehicles/{vehicleId} {
+      allow get: if isValidId(vehicleId) && isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(vehicleId)
+        && isVerified()
+        && isValidVehicle(incoming())
+        && incoming().id == vehicleId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(vehicleId)
+        && isVerified()
+        && isValidVehicle(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'lat', 'lng', 'heading', 'currentSpeed', 'fuelLevel',
+              'currentLocationName', 'currentLocationImage', 'lastUpdate', 'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(vehicleId) && (isAdmin() || (isVerified() && existing().createdBy == request.auth.uid));
+    }
+
+    // Drivers (Contains license/phone PII -> owner or admin)
+    match /drivers/{driverId} {
+      allow get: if isValidId(driverId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(driverId)
+        && isVerified()
+        && isValidDriver(incoming())
+        && incoming().id == driverId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(driverId)
+        && isVerified()
+        && isValidDriver(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'status', 'assignedPlate', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(driverId) && (isAdmin() || (isVerified() && existing().createdBy == request.auth.uid));
+    }
+
+    // Owners (Contains TIN/bank/phone PII -> owner or admin)
+    match /owners/{ownerId} {
+      allow get: if isValidId(ownerId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(ownerId)
+        && isVerified()
+        && isValidOwner(incoming())
+        && incoming().id == ownerId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(ownerId)
+        && isVerified()
+        && isValidOwner(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'email', 'city', 'vehiclesCount', 'activeVehicles', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(ownerId) && (isAdmin() || (isVerified() && existing().createdBy == request.auth.uid));
+    }
+
+    // Queue Turns (Publicly visible departures for signed-in passengers; mutations by creator or admin)
+    match /queues/{queueId} {
+      allow get: if isValidId(queueId) && isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(queueId)
+        && isVerified()
+        && isValidQueue(incoming())
+        && incoming().id == queueId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(queueId)
+        && isVerified()
+        && isValidQueue(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'bookedSeats', 'exitFeePaid', 'totalCollectedEtb', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(queueId) && (isAdmin() || (isVerified() && existing().createdBy == request.auth.uid));
+    }
+
+    // Routes & Tariffs (Publicly visible for signed-in users; admin/creator managed)
+    match /routes/{routeId} {
+      allow get: if isValidId(routeId) && isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn()
+        && (existing().visibility == 'public' || existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(routeId)
+        && isVerified()
+        && isValidRoute(incoming())
+        && incoming().id == routeId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(routeId)
+        && isVerified()
+        && isValidRoute(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['standardTariffBirr', 'tollFee', 'roadQuality', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(routeId) && (isAdmin() || (isVerified() && existing().createdBy == request.auth.uid));
+    }
+
+    // Safety Reports (Reporter sees own, Admin sees & resolves all)
+    match /safetyReports/{reportId} {
+      allow get: if isValidId(reportId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(reportId)
+        && isVerified()
+        && isValidSafetyReport(incoming())
+        && incoming().id == reportId
+        && incoming().createdBy == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(reportId)
+        && isVerified()
+        && isValidSafetyReport(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && existing().status == 'pending'
+            && incoming().status == 'pending'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['description', 'location', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(reportId) && isAdmin();
+    }
+
+    // Passenger Payments (Terminal state locking on 'completed' unless admin)
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(paymentId)
+        && isVerified()
+        && isValidPayment(incoming())
+        && incoming().id == paymentId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(paymentId)
+        && isVerified()
+        && isValidPayment(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && existing().paymentStatus == 'pending'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'paymentRefNumber', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(paymentId) && isAdmin();
+    }
+
+    // Terminal Gate Exit Fees
+    match /exitFees/{feeId} {
+      allow get: if isValidId(feeId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(feeId)
+        && isVerified()
+        && isValidExitFee(incoming())
+        && incoming().id == feeId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(feeId)
+        && isAdmin()
+        && isValidExitFee(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(feeId) && isAdmin();
+    }
+
+    // Owner Settlements (Terminal state locking on 'paid' unless admin)
+    match /settlements/{settlementId} {
+      allow get: if isValidId(settlementId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(settlementId)
+        && isVerified()
+        && isValidSettlement(incoming())
+        && incoming().id == settlementId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(settlementId)
+        && isVerified()
+        && isValidSettlement(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && existing().status != 'paid'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'transactionRef', 'receivedBy', 'settledAt', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(settlementId) && isAdmin();
+    }
+
+    // Smart Contract Agreements
+    match /contracts/{contractId} {
+      allow get: if isValidId(contractId) && isVerified() && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().createdBy == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(contractId)
+        && isVerified()
+        && isValidContract(incoming())
+        && incoming().id == contractId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(contractId)
+        && isVerified()
+        && isValidContract(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().createdBy == request.auth.uid
+            && existing().isSigned == false
+            && incoming().diff(existing()).affectedKeys().hasOnly(['isSigned', 'contractDate', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(contractId) && isAdmin();
+    }
+
+    // Public App Engagement (Likes)
+    match /engagement/{docId} {
+      allow get: if isValidId(docId) && isSignedIn() && existing().visibility == 'public';
+      allow list: if isSignedIn() && existing().visibility == 'public';
+      allow create: if isValidId(docId)
+        && isVerified()
+        && isValidEngagement(incoming())
+        && incoming().id == docId
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(docId)
+        && isVerified()
+        && isValidEngagement(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['likeCount', 'updatedBy', 'updatedAt']);
+      allow delete: if isValidId(docId) && isAdmin();
+    }
+  }
+}

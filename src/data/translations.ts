@@ -163,9 +163,9 @@ export const translations: Record<Language, Translations> = {
     fuel: 'ነዳጅ',
     heading: 'አቅጣጫ',
     corridor: 'ኮሪደር / መስመር',
-    simulation: 'የጉዞ ማስመሰያ (Simulation)',
-    playSimulation: 'አስጀምር',
-    pauseSimulation: 'አቁም',
+    simulation: 'የቀጥታ ጂፒኤስ ክትትል (Live Telemetry)',
+    playSimulation: 'ክትትል አስጀምር',
+    pauseSimulation: 'ክትትል አቁም',
     fastForward: 'አፍጥን',
 
     reportIncident: 'አዲስ የጥቆማ ቅሬታ አስገባ',
@@ -543,8 +543,8 @@ export const translations: Record<Language, Translations> = {
     fuel: 'Fuel Level',
     heading: 'Heading',
     corridor: 'Expressway / Corridor',
-    simulation: 'Trip Simulation',
-    playSimulation: 'Start',
+    simulation: 'Live GPS Telemetry',
+    playSimulation: 'Track Live',
     pauseSimulation: 'Pause',
     fastForward: 'Accelerate 2x',
 

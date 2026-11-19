@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated platform user profile and role preference",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "preferredRole": { "type": "string", "enum": ["user", "inspector"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "preferredRole", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authority inspector/admin allowlist record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Registered transport vehicle with live GPS telemetry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "plateNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "vehicleType": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "makeModel": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "year": { "type": "number" },
+        "capacity": { "type": "number" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "ownerName": { "type": "string", "maxLength": 160 },
+        "driverId": { "type": "string", "maxLength": 128 },
+        "driverName": { "type": "string", "maxLength": 120 },
+        "driverPhone": { "type": "string", "maxLength": 40 },
+        "speedLimiterId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["active", "on_route", "in_queue", "maintenance", "suspended"] },
+        "inspectionStatus": { "type": "string", "enum": ["passed", "warning", "expired"] },
+        "inspectionExpiry": { "type": "string", "maxLength": 40 },
+        "fuelLevel": { "type": "number" },
+        "currentSpeed": { "type": "number" },
+        "speedLimit": { "type": "number" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "heading": { "type": "number" },
+        "currentLocationName": { "type": "string", "maxLength": 200 },
+        "currentLocationImage": { "type": "string", "maxLength": 500 },
+        "origin": { "type": "string", "maxLength": 160 },
+        "destination": { "type": "string", "maxLength": 160 },
+        "routeName": { "type": "string", "maxLength": 200 },
+        "lastUpdate": { "type": "string", "maxLength": 64 },
+        "visibility": { "type": "string", "enum": ["public", "private"] },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "plateNumber", "vehicleType", "makeModel", "status", "lat", "lng", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Driver": {
+      "title": "Driver",
+      "description": "Licensed commercial driver record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "licenseNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "licenseGrade": { "type": "string", "maxLength": 80 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "experienceYears": { "type": "number" },
+        "rating": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "on_route", "resting", "suspended"] },
+        "penaltyPoints": { "type": "number" },
+        "assignedPlate": { "type": "string", "maxLength": 40 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "healthCertExpiry": { "type": "string", "maxLength": 40 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fullName", "licenseNumber", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Owner": {
+      "title": "Owner",
+      "description": "Transport association, company, or individual fleet owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "type": { "type": "string", "enum": ["association", "company", "individual", "cooperative"] },
+        "tin": { "type": "string", "maxLength": 40 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 120 },
+        "city": { "type": "string", "maxLength": 80 },
+        "vehiclesCount": { "type": "number" },
+        "activeVehicles": { "type": "number" },
+        "fleetRevenueEtb": { "type": "number" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "type", "createdBy", "createdAt", "updatedAt"]
+    },
+    "QueueTurn": {
+      "title": "QueueTurn",
+      "description": "Terminal vehicle departure queue slot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "terminalId": { "type": "string", "maxLength": 80 },
+        "terminalName": { "type": "string", "maxLength": 160 },
+        "routeId": { "type": "string", "maxLength": 80 },
+        "routeName": { "type": "string", "maxLength": 160 },
+        "vehicleId": { "type": "string", "maxLength": 80 },
+        "plateNumber": { "type": "string", "maxLength": 40 },
+        "vehicleType": { "type": "string", "maxLength": 40 },
+        "driverName": { "type": "string", "maxLength": 120 },
+        "driverPhone": { "type": "string", "maxLength": 40 },
+        "turnNumber": { "type": "number" },
+        "entryTime": { "type": "string", "maxLength": 40 },
+        "estimatedDeparture": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["waiting", "calling", "boarding", "dispatched", "cancelled"] },
+        "capacity": { "type": "number" },
+        "bookedSeats": { "type": "number" },
+        "ticketCode": { "type": "string", "maxLength": 64 },
+        "tariffPerSeat": { "type": "number" },
+        "exitFeePaid": { "type": "boolean" },
+        "totalCollectedEtb": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["public", "private"] },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "terminalName", "routeName", "plateNumber", "turnNumber", "status", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "TransportRoute": {
+      "title": "TransportRoute",
+      "description": "Transport route corridor and legal tariff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "code": { "type": "string", "maxLength": 40 },
+        "name": { "type": "string", "maxLength": 160 },
+        "origin": { "type": "string", "maxLength": 160 },
+        "destination": { "type": "string", "maxLength": 160 },
+        "distanceKm": { "type": "number" },
+        "standardTariffBirr": { "type": "number" },
+        "estimatedHours": { "type": "number" },
+        "checkpointsCount": { "type": "number" },
+        "tollFee": { "type": "number" },
+        "roadQuality": { "type": "string", "enum": ["expressway", "asphalt_good", "mountain_corridor", "gravel"] },
+        "visibility": { "type": "string", "enum": ["public", "private"] },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "origin", "destination", "standardTariffBirr", "visibility", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SafetyReport": {
+      "title": "SafetyReport",
+      "description": "Citizen safety report and traffic violation tip",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trackingNumber": { "type": "string", "maxLength": 64 },
+        "vehiclePlate": { "type": "string", "maxLength": 40 },
+        "reportedBy": { "type": "string", "maxLength": 120 },
+        "reporterPhone": { "type": "string", "maxLength": 40 },
+        "incidentType": { "type": "string", "enum": ["overspeed", "overloading", "reckless_driving", "tariff_extortion", "accident", "mechanical_issue"] },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "location": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1500 },
+        "hasAudio": { "type": "boolean" },
+        "audioNoteDuration": { "type": "string", "maxLength": 20 },
+        "photoUrl": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "under_investigation", "resolved", "fine_issued"] },
+        "speedRecorded": { "type": "number" },
+        "actionTaken": { "type": "string", "maxLength": 600 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "trackingNumber", "vehiclePlate", "incidentType", "severity", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "PassengerTicketPayment": {
+      "title": "PassengerTicketPayment",
+      "description": "Passenger fare payment and digital ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ticketNumber": { "type": "string", "maxLength": 64 },
+        "passengerName": { "type": "string", "maxLength": 120 },
+        "passengerPhone": { "type": "string", "maxLength": 40 },
+        "vehiclePlate": { "type": "string", "maxLength": 40 },
+        "routeName": { "type": "string", "maxLength": 160 },
+        "seatNumber": { "type": "number" },
+        "amountBirr": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["telebirr", "cbe_birr", "mpesa", "amole", "cash", "bank_transfer"] },
+        "paymentRefNumber": { "type": "string", "maxLength": 80 },
+        "paymentStatus": { "type": "string", "enum": ["completed", "pending", "refunded"] },
+        "issuedAt": { "type": "string", "maxLength": 64 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ticketNumber", "vehiclePlate", "amountBirr", "paymentStatus", "createdBy", "createdAt", "updatedAt"]
+    },
+    "TerminalExitFee": {
+      "title": "TerminalExitFee",
+      "description": "Terminal gate departure clearance fee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "queueTurnId": { "type": "string", "maxLength": 80 },
+        "vehiclePlate": { "type": "string", "maxLength": 40 },
+        "vehicleType": { "type": "string", "maxLength": 40 },
+        "ownerName": { "type": "string", "maxLength": 160 },
+        "driverName": { "type": "string", "maxLength": 120 },
+        "routeName": { "type": "string", "maxLength": 160 },
+        "feeAmountBirr": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["telebirr", "cbe_birr", "cash", "bank_transfer"] },
+        "paymentRef": { "type": "string", "maxLength": 80 },
+        "receiptNumber": { "type": "string", "maxLength": 80 },
+        "dispatchedAt": { "type": "string", "maxLength": 64 },
+        "clearedByInspector": { "type": "string", "maxLength": 120 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "vehiclePlate", "feeAmountBirr", "receiptNumber", "createdBy", "createdAt", "updatedAt"]
+    },
+    "OwnerSettlement": {
+      "title": "OwnerSettlement",
+      "description": "Fare payout settlement to vehicle owner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "settlementNumber": { "type": "string", "maxLength": 64 },
+        "ownerId": { "type": "string", "maxLength": 80 },
+        "ownerName": { "type": "string", "maxLength": 160 },
+        "vehiclePlate": { "type": "string", "maxLength": 40 },
+        "routeName": { "type": "string", "maxLength": 160 },
+        "periodDate": { "type": "string", "maxLength": 40 },
+        "totalPassengersCount": { "type": "number" },
+        "grossFaresCollectedBirr": { "type": "number" },
+        "terminalServiceFeeDeductedBirr": { "type": "number" },
+        "associationCommissionBirr": { "type": "number" },
+        "netPayoutToOwnerBirr": { "type": "number" },
+        "payoutMethod": { "type": "string", "enum": ["telebirr", "bank_account", "cbe_birr", "cash_handover"] },
+        "payoutAccountOrPhone": { "type": "string", "maxLength": 80 },
+        "transactionRef": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["paid", "pending_handover", "disputed"] },
+        "handedOverBy": { "type": "string", "maxLength": 120 },
+        "receivedBy": { "type": "string", "maxLength": 120 },
+        "settledAt": { "type": "string", "maxLength": 64 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "settlementNumber", "ownerName", "vehiclePlate", "netPayoutToOwnerBirr", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SmartContract": {
+      "title": "SmartContract",
+      "description": "Bilateral developer-to-authority handover contract record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "developerName": { "type": "string", "maxLength": 160 },
+        "authorityOfficial": { "type": "string", "maxLength": 160 },
+        "contractDate": { "type": "string", "maxLength": 40 },
+        "contractValueBirr": { "type": "number" },
+        "warrantyMonths": { "type": "number" },
+        "isSigned": { "type": "boolean" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "developerName", "authorityOfficial", "isSigned", "createdBy", "createdAt", "updatedAt"]
+    },
+    "AppEngagement": {
+      "title": "AppEngagement",
+      "description": "App likes count and user like tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "likeCount": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["public"] },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "likeCount", "visibility", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile and preferred dashboard role"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authorized authority inspector/administrator list"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": { "$ref": "#/entities/Vehicle" },
+      "description": "Registered fleet vehicles and live GPS positions"
+    },
+    "/drivers/{driverId}": {
+      "schema": { "$ref": "#/entities/Driver" },
+      "description": "Registered drivers and license records"
+    },
+    "/owners/{ownerId}": {
+      "schema": { "$ref": "#/entities/Owner" },
+      "description": "Registered fleet owners, associations, and companies"
+    },
+    "/queues/{queueId}": {
+      "schema": { "$ref": "#/entities/QueueTurn" },
+      "description": "Terminal vehicle departure queue turns"
+    },
+    "/routes/{routeId}": {
+      "schema": { "$ref": "#/entities/TransportRoute" },
+      "description": "Registered transport corridors and official tariffs"
+    },
+    "/safetyReports/{reportId}": {
+      "schema": { "$ref": "#/entities/SafetyReport" },
+      "description": "Citizen safety reports and traffic violation incidents"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/PassengerTicketPayment" },
+      "description": "Passenger ticket fare payment records"
+    },
+    "/exitFees/{feeId}": {
+      "schema": { "$ref": "#/entities/TerminalExitFee" },
+      "description": "Terminal gate exit clearance receipts"
+    },
+    "/settlements/{settlementId}": {
+      "schema": { "$ref": "#/entities/OwnerSettlement" },
+      "description": "Owner fare handover and financial settlements"
+    },
+    "/contracts/{contractId}": {
+      "schema": { "$ref": "#/entities/SmartContract" },
+      "description": "Signed smart contract agreement records"
+    },
+    "/engagement/{docId}": {
+      "schema": { "$ref": "#/entities/AppEngagement" },
+      "description": "App likes and social engagement metrics"
+    }
+  }
+}

@@ -2,30 +2,21 @@ import React, { useState } from 'react';
 import { 
   Activity, 
   Truck, 
-  MapPin, 
   Users, 
   ShieldAlert, 
   Clock, 
   AlertTriangle, 
-  Mic2, 
-  FileSpreadsheet, 
   ArrowUpRight,
-  Radio,
   CheckCircle2,
-  Building2,
-  Heart,
-  Share2,
   CreditCard,
   Search,
   Navigation,
   FileCheck2,
   PhoneCall,
   Volume2,
-  Sparkles,
   Ticket,
   ChevronRight,
-  ShieldCheck,
-  Send
+  ShieldCheck
 } from 'lucide-react';
 import { Language, QueueTurn, SafetyReport, Vehicle } from '../types';
 import { translations } from '../data/translations';
@@ -63,40 +54,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const setRole = (role: 'user' | 'inspector') => {
     setInternalRole(role);
     if (onRoleChange) onRoleChange(role);
-  };
-
-  // Like system state in dashboard
-  const [likeCount, setLikeCount] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('transport_et_likes');
-      return saved ? parseInt(saved, 10) : 1482;
-    }
-    return 1482;
-  });
-  const [hasLiked, setHasLiked] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('transport_et_user_has_liked') === 'true';
-    }
-    return false;
-  });
-
-  const handleToggleLike = () => {
-    if (hasLiked) {
-      const next = Math.max(0, likeCount - 1);
-      setLikeCount(next);
-      setHasLiked(false);
-      localStorage.setItem('transport_et_likes', next.toString());
-      localStorage.setItem('transport_et_user_has_liked', 'false');
-    } else {
-      const next = likeCount + 1;
-      setLikeCount(next);
-      setHasLiked(true);
-      localStorage.setItem('transport_et_likes', next.toString());
-      localStorage.setItem('transport_et_user_has_liked', 'true');
-      if (audioAlertsEnabled) {
-        speakText('እናመሰግናለን! ስርዓቱን ወደዱት!', 'am');
-      }
-    }
   };
 
   // Passenger Journey Finder State (unrestricted origin & destination)
@@ -146,8 +103,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Role Switcher Tabs Header - Clean, Clutter-Free */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-2 sm:p-3 rounded-2xl shadow-xl backdrop-blur-md">
+      {/* Role Switcher Tabs Header - Left-aligned, clean right side */}
+      <div className="flex flex-col sm:flex-row items-start justify-start gap-4 bg-slate-900/90 border border-slate-800 p-2 sm:p-3 rounded-2xl shadow-xl backdrop-blur-md">
         <div className="flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-xl border border-slate-800 w-full sm:w-auto">
           <button
             onClick={() => setRole('user')}
@@ -173,47 +130,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <span>የተቆጣጣሪና ባለስልጣን ዳሽቦርድ (Inspector/Command)</span>
           </button>
         </div>
-
-        {/* Social Like, Share & Smart Contract Fast Bar */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          {/* Like Button */}
-          <button
-            onClick={handleToggleLike}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-              hasLiked
-                ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-950/50'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-rose-500/50 hover:text-rose-400'
-            }`}
-            title="ስርዓቱን ላይክ አድርግ"
-          >
-            <Heart className={`w-3.5 h-3.5 ${hasLiked ? 'fill-white text-white' : 'text-rose-400'}`} />
-            <span className="font-mono text-xs">{likeCount}</span>
-          </button>
-
-          {/* Share Button */}
-          {onOpenShareModal && (
-            <button
-              onClick={onOpenShareModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 transition-all shadow-sm"
-              title="አጋራ / ሸር"
-            >
-              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">ሸር (Share)</span>
-            </button>
-          )}
-
-          {/* Smart Contract Button */}
-          {onOpenContractModal && (
-            <button
-              onClick={onOpenContractModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white border border-amber-500/50 shadow-md transition-all"
-              title="የገንቢውና የተቋሙ ስማርት ውል"
-            >
-              <FileCheck2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">ስማርት ውል</span>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* =========================================================================
@@ -221,42 +137,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
          ========================================================================= */}
       {currentRole === 'user' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Clean User Welcome Banner */}
+          {/* Clean User Welcome Banner (Right side clean) */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-emerald-950/40 to-slate-900 border border-emerald-500/30 p-6 sm:p-7 shadow-2xl">
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                    የተጠቃሚና የመንገደኛ አገልግሎት ማዕከል (Citizen Portal)
-                  </span>
-                </div>
-                <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-                  የትራንስፖርት ጉዞዎን ያቅዱ፣ ተራና ቲኬት ይከታተሉ
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-300">
-                  ከባጃጅ እስከ አገር አቋራጭ አውቶቡስ ያሉ ተሽከርካሪዎችን መነሻና መዳረሻ በየትኛውም ቦታ ይፈልጉ::
-                </p>
+            <div className="relative z-10 flex flex-col items-start justify-start gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  የተጠቃሚና የመንገደኛ አገልግሎት ማዕከል (Citizen Portal)
+                </span>
               </div>
-
-              {/* Passenger Quick Action Shortcuts */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <button
-                  onClick={() => onNavigateTab('liveTracking')}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg transition-transform active:scale-95"
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span>የቀጥታ ጂፒኤስ ካርታ</span>
-                </button>
-
-                <button
-                  onClick={() => onNavigateTab('safetyCitizenTips')}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-rose-600/90 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg transition-transform active:scale-95"
-                >
-                  <ShieldAlert className="w-4 h-4" />
-                  <span>ጥቆማ / SOS ስጥ</span>
-                </button>
-              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white">
+                የትራንስፖርት ጉዞዎን ያቅዱ፣ ተራና ቲኬት ይከታተሉ
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300">
+                ከባጃጅ እስከ አገር አቋራጭ አውቶቡስ ያሉ ተሽከርካሪዎችን መነሻና መዳረሻ በየትኛውም ቦታ ይፈልጉ::
+              </p>
             </div>
           </div>
 
@@ -271,19 +166,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <h2 className="font-bold text-white text-sm sm:text-base">
                     የጉዞ መፈለጊያ እና የታሪፍ ማረጋገጫ (Trip & Tariff Finder)
                   </h2>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     ያለገደብ በየትኛውም ከተማ፣ ወረዳ ወይም ገጠር መነሻና መዳረሻ ያስገቡ
                   </p>
                 </div>
               </div>
-              <span className="text-[11px] font-mono bg-slate-800 text-emerald-300 px-2.5 py-1 rounded-full border border-slate-700">
+              <span className="text-xs font-mono bg-slate-800 text-emerald-300 px-2.5 py-1 rounded-full border border-slate-700">
                 100% ያለገደብ ክፍት
               </span>
             </div>
 
             <form onSubmit={handleSearchJourney} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-4">
-                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">መነሻ ቦታ (Origin)</label>
+                <label className="block text-xs text-slate-400 mb-1 font-semibold">መነሻ ቦታ (Origin)</label>
                 <input
                   type="text"
                   value={searchOrigin}
@@ -294,7 +189,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </div>
 
               <div className="sm:col-span-4">
-                <label className="block text-[11px] text-slate-400 mb-1 font-semibold">መድረሻ ቦታ (Destination)</label>
+                <label className="block text-xs text-slate-400 mb-1 font-semibold">መድረሻ ቦታ (Destination)</label>
                 <input
                   type="text"
                   value={searchDestination}
@@ -385,7 +280,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                             {q.vehicleType}
                           </span>
                         </div>
-                        <p className="text-slate-400 text-[11px] mt-0.5">{q.routeName}</p>
+                        <p className="text-slate-400 text-xs mt-0.5">{q.routeName}</p>
                       </div>
                     </div>
 
@@ -413,41 +308,61 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             {/* Quick Vehicle Type Directory & Passenger Tools */}
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3.5">
-                <h3 className="font-bold text-white text-sm flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <Truck className="w-4 h-4 text-emerald-400" />
-                  <span>ሁሉንም ያካተተ የተሽከርካሪ መደቦች</span>
-                </h3>
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-emerald-400" />
+                    <span>ሁሉንም ያካተተ የተሽከርካሪ መደቦች</span>
+                  </h3>
+                  <button
+                    onClick={() => onNavigateTab('vehicles')}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-bold"
+                  >
+                    ሁሉንም ስሞች እይ ➔
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center gap-2.5">
+                  <div
+                    onClick={() => onNavigateTab('vehicles')}
+                    className="p-2.5 bg-slate-800/80 hover:border-emerald-500/50 cursor-pointer rounded-2xl border border-slate-700 flex items-center gap-2.5 transition-colors"
+                  >
                     <span className="text-xl">🛺</span>
                     <div>
-                      <strong className="text-white block text-xs">ባጃጅ / ባለ 3 እግር</strong>
-                      <span className="text-[10px] text-slate-400">የአካባቢ ፈጣን ጉዞ</span>
+                      <strong className="text-white block text-xs">ባጃጅ / ሞተርሳይክል</strong>
+                      <span className="text-[10px] text-slate-400">Bajaj RE • TVS • Boxer</span>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center gap-2.5">
+                  <div
+                    onClick={() => onNavigateTab('vehicles')}
+                    className="p-2.5 bg-slate-800/80 hover:border-emerald-500/50 cursor-pointer rounded-2xl border border-slate-700 flex items-center gap-2.5 transition-colors"
+                  >
                     <span className="text-xl">🚐</span>
                     <div>
-                      <strong className="text-white block text-xs">ሚኒባስ / ዳማስ</strong>
-                      <span className="text-[10px] text-slate-400">የከተማና የቅርብ ርቀት</span>
+                      <strong className="text-white block text-xs">ዳማስ / ሚኒባስ / EV</strong>
+                      <span className="text-[10px] text-slate-400">HiAce • BYD EV • Corolla</span>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center gap-2.5">
+                  <div
+                    onClick={() => onNavigateTab('vehicles')}
+                    className="p-2.5 bg-slate-800/80 hover:border-emerald-500/50 cursor-pointer rounded-2xl border border-slate-700 flex items-center gap-2.5 transition-colors"
+                  >
                     <span className="text-xl">🚌</span>
                     <div>
-                      <strong className="text-white block text-xs">አገር አቋራጭ አውቶቡስ</strong>
-                      <span className="text-[10px] text-slate-400">ደረጃ 1፣ 2 እና 3</span>
+                      <strong className="text-white block text-xs">አውቶቡስ / ቪአይፒ / አንበሳ</strong>
+                      <span className="text-[10px] text-slate-400">Yutong • Higer • Scania</span>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 flex items-center gap-2.5">
-                    <span className="text-xl">🚚</span>
+                  <div
+                    onClick={() => onNavigateTab('vehicles')}
+                    className="p-2.5 bg-slate-800/80 hover:border-emerald-500/50 cursor-pointer rounded-2xl border border-slate-700 flex items-center gap-2.5 transition-colors"
+                  >
+                    <span className="text-xl">🚛</span>
                     <div>
-                      <strong className="text-white block text-xs">የጭነት ተሽከርካሪዎች</strong>
-                      <span className="text-[10px] text-slate-400">ሲኖትራክና አይሱዙ</span>
+                      <strong className="text-white block text-xs">ጭነት / ቦቴ / አምቡላንስ</strong>
+                      <span className="text-[10px] text-slate-400">Sinotruk • Isuzu • Volvo</span>
                     </div>
                   </div>
                 </div>
@@ -479,7 +394,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </div>
                     <div>
                       <h4 className="font-bold text-white text-xs">ዲጂታል የትራንስፖርት ክፍያና ርክክብ</h4>
-                      <p className="text-[11px] text-slate-400">የቴሌብርና ሲቢኢ የቲኬት ክፍያ ፈጽም ወይም የርክክብ ደረሰኝ እይ</p>
+                      <p className="text-xs text-slate-400">የቴሌብርና ሲቢኢ የቲኬት ክፍያ ፈጽም ወይም የርክክብ ደረሰኝ እይ</p>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform" />
@@ -495,44 +410,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
          ========================================================================= */}
       {currentRole === 'inspector' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Authority Command Header */}
+          {/* Authority Command Header (Right side clean) */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-cyan-950/50 to-slate-950 border border-cyan-500/40 p-6 sm:p-7 shadow-2xl">
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-                  <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
-                    የመንገድና ትራንስፖርት ባለስልጣን የቁጥጥርና ትእዛዝ ክፍል (Authority Command)
-                  </span>
-                </div>
-                <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-                  የአገር አቀፍ የፍሊት፣ የኬላና የተራ የቀጥታ ቁጥጥር
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-300">
-                  የፍጥነት ወሰን ጥሰት፣ የኬላ መውጫ ክፍያ፣ የደህንነት ጥቆማዎችና ህጋዊ የውል ስምምነት ክትትል::
-                </p>
+            <div className="relative z-10 flex flex-col items-start justify-start gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
+                  የመንገድና ትራንስፖርት ባለስልጣን የቁጥጥርና ትእዛዝ ክፍል (Authority Command)
+                </span>
               </div>
-
-              {/* Inspector Fast Action Shortcuts */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <button
-                  onClick={() => onNavigateTab('reportsExport')}
-                  className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold border border-slate-700 shadow"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  <span>ኤክሴል ሪፖርት አውርድ</span>
-                </button>
-
-                {onOpenContractModal && (
-                  <button
-                    onClick={onOpenContractModal}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-cyan-950/60"
-                  >
-                    <FileCheck2 className="w-4 h-4" />
-                    <span>የተቋሙ ስማርት ውል</span>
-                  </button>
-                )}
-              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white">
+                የአገር አቀፍ የፍሊት፣ የኬላና የተራ የቀጥታ ቁጥጥር
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300">
+                የፍጥነት ወሰን ጥሰት፣ የኬላ መውጫ ክፍያ፣ የደህንነት ጥቆማዎችና ህጋዊ የውል ስምምነት ክትትል::
+              </p>
             </div>
           </div>
 
@@ -555,7 +447,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <ArrowUpRight className="w-3.5 h-3.5" /> 100% በጂፒኤስ ቁጥጥር ስር
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-2">ከባጃጅ እስከ አገር አቋራጭ</p>
+              <p className="text-xs text-slate-400 mt-2">ከባጃጅ እስከ አገር አቋራጭ</p>
             </div>
 
             {/* Metric 2: Active on Road */}
@@ -573,7 +465,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <span className="text-3xl font-extrabold text-emerald-400 font-mono">{onRouteCount}</span>
                 <span className="text-xs text-slate-400">በጉዞ ላይ</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-2">በቀጥታ ሳተላይት ክትትል</p>
+              <p className="text-xs text-slate-400 mt-2">በቀጥታ ሳተላይት ክትትል</p>
             </div>
 
             {/* Metric 3: Safety Violations */}
@@ -595,7 +487,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <span className="text-3xl font-extrabold text-red-400 font-mono">{overspeedCount}</span>
                 <span className="text-xs text-red-300 font-semibold">ተሽከርካሪዎች</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-2">
+              <p className="text-xs text-slate-400 mt-2">
                 {criticalReports} አዳዲስ የተጠቃሚ ጥቆማዎች
               </p>
             </div>
@@ -615,7 +507,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <span className="text-3xl font-extrabold text-purple-400 font-mono">{inQueueCount}</span>
                 <span className="text-xs text-purple-300 font-semibold">በተራ መጠበቂያ</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-2">{todayPassengers} ዛሬ የተጓጓዙ ተሳፋሪዎች</p>
+              <p className="text-xs text-slate-400 mt-2">{todayPassengers} ዛሬ የተጓጓዙ ተሳፋሪዎች</p>
             </div>
           </div>
 
@@ -655,7 +547,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                             {q.driverName}
                           </span>
                         </div>
-                        <p className="text-slate-400 text-[11px] mt-0.5">{q.routeName}</p>
+                        <p className="text-slate-400 text-xs mt-0.5">{q.routeName}</p>
                       </div>
                     </div>
 
@@ -666,7 +558,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                             speakText(`ተራ ቁጥር ${q.turnNumber} ታርጋ ${q.plateNumber} ወደ መጫኛ መድረክ ይግቡ!`, 'am');
                           }
                         }}
-                        className="px-2.5 py-1.5 bg-cyan-600/30 hover:bg-cyan-600 text-cyan-200 hover:text-white rounded-lg border border-cyan-500/40 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                        className="px-2.5 py-1.5 bg-cyan-600/30 hover:bg-cyan-600 text-cyan-200 hover:text-white rounded-lg border border-cyan-500/40 text-xs font-bold flex items-center gap-1 transition-colors"
                         title="ተራ ጥሪ አሰማ"
                       >
                         <Volume2 className="w-3 h-3" />
@@ -693,15 +585,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </div>
 
                 <div className="text-xs text-slate-300 space-y-2 leading-relaxed">
-                  <div className="flex justify-between border-b border-slate-800 pb-1.5 text-[11px]">
+                  <div className="flex justify-between border-b border-slate-800 pb-1.5 text-xs">
                     <span className="text-slate-400">ገንቢ / አርክቴክት፡</span>
                     <span className="font-semibold text-white">Senior Software Engineering Architect</span>
                   </div>
-                  <div className="flex justify-between border-b border-slate-800 pb-1.5 text-[11px]">
+                  <div className="flex justify-between border-b border-slate-800 pb-1.5 text-xs">
                     <span className="text-slate-400">ተቋም / ባለስልጣን፡</span>
                     <span className="font-semibold text-white">አቶ ዘበነ አስፋው (ዋና ዳይሬክተር)</span>
                   </div>
-                  <div className="flex justify-between text-[11px]">
+                  <div className="flex justify-between text-xs">
                     <span className="text-slate-400">የውል መጠንና ዋስትና፡</span>
                     <span className="font-bold text-amber-400 font-mono">3,850,000 ብር (24 ወራት)</span>
                   </div>

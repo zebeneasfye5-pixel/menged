@@ -5,16 +5,31 @@ export type VehicleType =
   | 'motorcycle'     // ሞተርሳይክል (Motorbike Taxi)
   | 'damas'          // ዳማስ / ሱዙኪ ቫን (Small Mini Van)
   | 'taxi'           // ታክሲ (Sedan / Lada Taxi)
+  | 'ev_taxi'        // ኤሌክትሪክ ታክሲ (Electric Taxi / BYD / VW ID)
   | 'minibus'        // ሚኒባስ ታክሲ (12-16 Seats)
   | 'midibus'        // ኮድ 3 መካከለኛ አውቶቡስ (27-32 Seats)
+  | 'city_bus'       // የከተማ አውቶቡስ (Anbessa / Sheger City Bus)
   | 'bus'            // የረጅም ርቀት አውቶቡስ (45-65 Seats)
   | 'vip_coach'      // ቪአይፒ የቅንጦት ባስ (Luxury Coach)
+  | 'pickup'         // ፒካፕ (Pickup / 4x4 Double Cab)
+  | 'suv'            // ላንድ ክሩዘር / ኤስዩቪ (SUV / Field 4WD)
   | 'truck'          // አይሱዙ / ሲኖትራክ የከባድ ጭነት (Freight Truck)
-  | 'special';       // ልዩ ተሽከርካሪ (Special Vehicle / Tanker / Ambulance)
+  | 'tanker'         // የነዳጅ / ፈሳሽ ቦቴ (Fuel & Liquid Tanker)
+  | 'trailer'        // ተሳቢ ከባድ መኪና (Heavy Semi-Trailer)
+  | 'ambulance'      // አምቡላንስ (Emergency Ambulance)
+  | 'special';       // ልዩ ተሽከርካሪ (Special Vehicle / Fire / Crane)
 
 export type VehicleStatus = 'active' | 'on_route' | 'in_queue' | 'maintenance' | 'suspended';
 
 export type InspectionStatus = 'passed' | 'warning' | 'expired';
+
+export interface GpsTrailPoint {
+  lat: number;
+  lng: number;
+  speed: number;
+  timestamp: string;
+  placeName: string;
+}
 
 export interface Vehicle {
   id: string;
@@ -37,6 +52,10 @@ export interface Vehicle {
   speedLimit: number; // km/h
   lat: number;
   lng: number;
+  heading?: number; // 0-359 degrees
+  currentLocationName?: string;
+  currentLocationImage?: string;
+  trail?: GpsTrailPoint[];
   routeId?: string;
   routeName?: string;
   origin?: string;
