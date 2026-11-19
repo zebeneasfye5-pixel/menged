@@ -429,6 +429,7 @@ export default function App() {
               vehicles={vehicles}
               queues={queues}
               reports={safetyReports}
+              routes={routes}
               currentLang={currentLang}
               onNavigateTab={setCurrentTab}
               audioAlertsEnabled={audioAlertsEnabled}

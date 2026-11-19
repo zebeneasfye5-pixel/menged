@@ -18,7 +18,7 @@ import {
   ChevronRight,
   ShieldCheck
 } from 'lucide-react';
-import { Language, QueueTurn, SafetyReport, Vehicle } from '../types';
+import { Language, QueueTurn, SafetyReport, TransportRoute, Vehicle } from '../types';
 import { translations } from '../data/translations';
 import { speakText } from '../utils/audio';
 
@@ -26,6 +26,7 @@ interface DashboardOverviewProps {
   vehicles: Vehicle[];
   queues: QueueTurn[];
   reports: SafetyReport[];
+  routes?: TransportRoute[];
   currentLang: Language;
   onNavigateTab: (tab: string) => void;
   audioAlertsEnabled: boolean;
@@ -39,6 +40,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   vehicles,
   queues,
   reports,
+  routes = [],
   currentLang,
   onNavigateTab,
   audioAlertsEnabled,
@@ -71,26 +73,57 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     e.preventDefault();
     if (!searchOrigin.trim() && !searchDestination.trim()) return;
 
-    // Search existing queue or vehicles or simulate unrestricted route match
-    const matchingQueue = queues.find(q => 
-      q.routeName.toLowerCase().includes(searchOrigin.toLowerCase()) ||
-      q.routeName.toLowerCase().includes(searchDestination.toLowerCase())
+    const origLower = searchOrigin.trim().toLowerCase();
+    const destLower = searchDestination.trim().toLowerCase();
+
+    const matchingRoute = routes.find((r) => {
+      const rOrig = r.origin.toLowerCase();
+      const rDest = r.destination.toLowerCase();
+      const origMatch = !origLower || rOrig.includes(origLower) || origLower.includes(rOrig);
+      const destMatch = !destLower || rDest.includes(destLower) || destLower.includes(rDest);
+      return origMatch && destMatch;
+    });
+
+    const matchingQueues = queues.filter(
+      (q) =>
+        (!origLower || q.routeName.toLowerCase().includes(origLower)) &&
+        (!destLower || q.routeName.toLowerCase().includes(destLower))
     );
 
-    const baseFare = Math.floor(Math.random() * 250) + 120;
-    const estDistance = `${Math.floor(Math.random() * 320) + 45} ኪ.ሜ`;
-    const count = vehicles.filter(v => v.status === 'in_queue' || v.status === 'on_route').length;
+    const matchingVehicles = vehicles.filter(
+      (v) =>
+        (v.status === 'in_queue' || v.status === 'on_route') &&
+        (!origLower || (v.origin ?? '').toLowerCase().includes(origLower)) &&
+        (!destLower || (v.destination ?? '').toLowerCase().includes(destLower))
+    );
+
+    const activeVehiclesTotal = vehicles.filter(
+      (v) => v.status === 'in_queue' || v.status === 'on_route'
+    ).length;
+
+    const routeLabel = matchingRoute
+      ? `${matchingRoute.origin} ➔ ${matchingRoute.destination}`
+      : `${searchOrigin.trim() || 'መነሻ'} ➔ ${searchDestination.trim() || 'መድረሻ'}`;
+
+    const fareAmount = matchingRoute
+      ? matchingRoute.standardTariffBirr
+      : matchingQueues[0]?.tariffPerSeat || 180;
+    const distanceLabel = matchingRoute ? `${matchingRoute.distanceKm} ኪ.ሜ` : 'ክፍት መስመር';
+    const availableCount =
+      matchingQueues.length > 0 || matchingVehicles.length > 0
+        ? Math.max(matchingQueues.length, matchingVehicles.length)
+        : Math.max(1, activeVehiclesTotal);
 
     setSearchResult({
       found: true,
-      route: `${searchOrigin || 'አዲስ አበባ'} ➔ ${searchDestination || 'መድረሻ'}`,
-      fare: matchingQueue ? 280 : baseFare,
-      distance: estDistance,
-      availableVehicles: Math.max(1, count),
+      route: routeLabel,
+      fare: fareAmount,
+      distance: distanceLabel,
+      availableVehicles: availableCount,
     });
 
     if (audioAlertsEnabled) {
-      speakText(`${searchOrigin} ወደ ${searchDestination} የጉዞ መስመር ተገኝቷል`, 'am');
+      speakText(`${routeLabel} የጉዞ መስመር ተገኝቷል`, 'am');
     }
   };
 

@@ -121,7 +121,6 @@ export const TRANSPORT_PHRASES: TransportPhrase[] = [
   },
 ];
 
-// Dictionary of keywords to translate common custom sentences
 const DICT_EN: Record<string, Record<Language, string>> = {
   'hello': { am: 'ሰላም', om: 'Akkam', ti: 'ሰላም', so: 'Nabadeey', en: 'Hello', ar: 'مرحباً', fr: 'Bonjour', zh: '您好' },
   'welcome': { am: 'እንኳን ደህና መጡ', om: 'Baga nagaan dhuftan', ti: 'እንቋዕ ብደሓን መፃእኹም', so: 'Ku soo dhowow', en: 'Welcome', ar: 'أهلاً وسهلاً', fr: 'Bienvenue', zh: '欢迎光临' },
@@ -138,14 +137,13 @@ const DICT_EN: Record<string, Record<Language, string>> = {
 };
 
 /**
- * Universal translator function: translates given text from sourceLang to targetLang
+ * Synchronous offline phrase & keyword fallback (strictly used when device is offline).
  */
 export function translateMessage(text: string, sourceLang: Language, targetLang: Language): string {
   if (sourceLang === targetLang) return text;
   const clean = text.trim();
   if (!clean) return '';
 
-  // 1. Check if it's one of our transport phrases in source language
   for (const phrase of TRANSPORT_PHRASES) {
     const src = phrase.translations[sourceLang]?.toLowerCase().trim();
     if (src && (clean.toLowerCase() === src || clean.toLowerCase().includes(src.substring(0, Math.min(15, src.length))))) {
@@ -153,16 +151,14 @@ export function translateMessage(text: string, sourceLang: Language, targetLang:
     }
   }
 
-  // 2. Check keyword dictionary matches
   const lower = clean.toLowerCase();
-  for (const [key, mapping] of Object.entries(DICT_EN)) {
+  for (const mapping of Object.values(DICT_EN)) {
     const srcWord = mapping[sourceLang]?.toLowerCase();
-    if (srcWord && lower.includes(srcWord)) {
-      return mapping[targetLang] + ' (' + clean + ')';
+    if (srcWord && (lower === srcWord || lower.includes(srcWord))) {
+      return mapping[targetLang] || clean;
     }
   }
 
-  // 3. Smart contextual translation for road & transport terms
   if (lower.includes('speed') || lower.includes('ፍጥነት') || lower.includes('saffisa') || lower.includes('سرعة') || lower.includes('速度')) {
     return TRANSPORT_PHRASES[1].translations[targetLang];
   }
@@ -179,17 +175,87 @@ export function translateMessage(text: string, sourceLang: Language, targetLang:
     return TRANSPORT_PHRASES[5].translations[targetLang];
   }
 
-  // Fallback: Return with language tag prefix indicating translation
-  const langNames: Record<Language, string> = {
-    am: 'ትርጉም [አማርኛ]',
-    om: 'Hiika [Afaan Oromoo]',
-    ti: 'ትርጉም [ትግርኛ]',
-    so: 'Turjumid [Soomaali]',
-    en: 'Translation [English]',
-    ar: 'الترجمة [العربية]',
-    fr: 'Traduction [Français]',
-    zh: '译文 [中文]',
+  return `[Offline] ${clean}`;
+}
+
+/**
+ * Live AI translation across all 8 languages via /api/translate.
+ * Uses local offline dictionary strictly when navigator.onLine is false.
+ */
+export async function translateMessageLive(
+  text: string,
+  sourceLang: Language,
+  targetLang: Language
+): Promise<{ translatedText: string; mode: 'ai' | 'preset' | 'offline' }> {
+  const clean = text.trim();
+  if (!clean) {
+    throw new Error('Text to translate cannot be empty.');
+  }
+  if (sourceLang === targetLang) {
+    return { translatedText: clean, mode: 'preset' };
+  }
+
+  // Exact match to official verified transport phrases yields zero-latency accurate translation
+  for (const phrase of TRANSPORT_PHRASES) {
+    const src = phrase.translations[sourceLang]?.trim();
+    if (src && src.toLowerCase() === clean.toLowerCase()) {
+      return {
+        translatedText: phrase.translations[targetLang] || clean,
+        mode: 'preset',
+      };
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      translatedText: translateMessage(clean, sourceLang, targetLang),
+      mode: 'offline',
+    };
+  }
+
+  const res = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: clean, sourceLang, targetLang }),
+  });
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    translatedText?: string;
+    error?: string;
   };
 
-  return `${clean} (${langNames[targetLang]})`;
+  if (!res.ok || !payload.translatedText) {
+    throw new Error(payload.error || `Translation failed (HTTP ${res.status})`);
+  }
+
+  return {
+    translatedText: payload.translatedText.trim(),
+    mode: 'ai',
+  };
+}
+
+/**
+ * Live audio transcription for any of the 8 languages via /api/transcribe.
+ */
+export async function transcribeAudioLive(
+  audioBase64: string,
+  mimeType: string,
+  sourceLang: Language
+): Promise<string> {
+  const res = await fetch('/api/transcribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audioBase64, mimeType, sourceLang }),
+  });
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    transcript?: string;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(payload.error || `Audio transcription failed (HTTP ${res.status})`);
+  }
+
+  return (payload.transcript ?? '').trim();
 }

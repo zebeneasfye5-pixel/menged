@@ -1,24 +1,42 @@
 /**
  * Audio Synthesizer and Voice Alert Engine
  * Uses Web Audio API for offline zero-latency chimes and alerts,
- * and Web Speech API for automated spoken announcements.
+ * server-side Gemini TTS (/api/tts) for accurate multilingual speech (am, om, ti, so, en, ar, fr, zh),
+ * and Web Speech API fallback when offline.
  */
 
-// Web Audio Context singleton
 let audioCtx: AudioContext | null = null;
+let activeAudioElement: HTMLAudioElement | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
     }
   }
   if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    void audioCtx.resume();
   }
   return audioCtx;
+}
+
+export function stopAllSpeech() {
+  if (activeAudioElement) {
+    try {
+      activeAudioElement.pause();
+      activeAudioElement.currentTime = 0;
+    } catch {
+      // Ignore audio cleanup errors
+    }
+    activeAudioElement = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
 }
 
 /**
@@ -29,8 +47,7 @@ export function playStationChime() {
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  
-  // Tone 1: High bell (587.33 Hz - D5)
+
   const osc1 = ctx.createOscillator();
   const gain1 = ctx.createGain();
   osc1.type = 'sine';
@@ -42,7 +59,6 @@ export function playStationChime() {
   osc1.start(now);
   osc1.stop(now + 0.8);
 
-  // Tone 2: Lower bell (440 Hz - A4)
   const osc2 = ctx.createOscillator();
   const gain2 = ctx.createGain();
   osc2.type = 'sine';
@@ -67,7 +83,6 @@ export function playEmergencySiren() {
   const gain = ctx.createGain();
   osc.type = 'sawtooth';
 
-  // Siren modulation
   osc.frequency.setValueAtTime(700, now);
   osc.frequency.linearRampToValueAtTime(1100, now + 0.25);
   osc.frequency.linearRampToValueAtTime(700, now + 0.5);
@@ -95,10 +110,10 @@ export function playSuccessTone() {
   const gain = ctx.createGain();
   osc.type = 'triangle';
 
-  osc.frequency.setValueAtTime(523.25, now); // C5
-  osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-  osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
-  osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+  osc.frequency.setValueAtTime(523.25, now);
+  osc.frequency.setValueAtTime(659.25, now + 0.1);
+  osc.frequency.setValueAtTime(783.99, now + 0.2);
+  osc.frequency.setValueAtTime(1046.5, now + 0.3);
 
   gain.gain.setValueAtTime(0.25, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
@@ -110,7 +125,7 @@ export function playSuccessTone() {
 }
 
 /**
- * Speak text in a specified language via Web Speech Synthesis
+ * Speak text in a specified language via browser Web Speech Synthesis (offline / local)
  */
 export function speakText(text: string, langCode: string = 'am', onEnd?: () => void) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -118,11 +133,10 @@ export function speakText(text: string, langCode: string = 'am', onEnd?: () => v
     return;
   }
 
-  window.speechSynthesis.cancel(); // Stop any pending speech
+  window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
-  
-  // Map our language keys to standard BCP 47 language tags
+
   const bcpMap: Record<string, string> = {
     am: 'am-ET',
     om: 'om-ET',
@@ -139,9 +153,8 @@ export function speakText(text: string, langCode: string = 'am', onEnd?: () => v
   utterance.rate = 0.95;
   utterance.pitch = 1.0;
 
-  // Try to match an available voice
   const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find(v => v.lang.startsWith(targetBcp.substring(0, 2)));
+  const matchedVoice = voices.find((v) => v.lang.toLowerCase().startsWith(targetBcp.substring(0, 2).toLowerCase()));
   if (matchedVoice) {
     utterance.voice = matchedVoice;
   }
@@ -155,4 +168,77 @@ export function speakText(text: string, langCode: string = 'am', onEnd?: () => v
   };
 
   window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * Speak text aloud using server-side Gemini TTS (all 8 languages including am, om, ti, so)
+ * when online, with clean offline Web Speech Synthesis fallback.
+ */
+export async function speakTextSmart(
+  text: string,
+  langCode: string = 'am',
+  onEnd?: () => void
+): Promise<{ provider: 'gemini-tts' | 'browser'; error?: string }> {
+  const cleanText = text.trim();
+  if (!cleanText) {
+    if (onEnd) onEnd();
+    return { provider: 'browser' };
+  }
+
+  stopAllSpeech();
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    speakText(cleanText, langCode, onEnd);
+    return { provider: 'browser' };
+  }
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText, langCode }),
+    });
+
+    const data = (await res.json().catch(() => ({}))) as {
+      audioBase64?: string;
+      mimeType?: string;
+      error?: string;
+    };
+
+    if (!res.ok || !data.audioBase64) {
+      // Fallback to native browser voice if available while reporting TTS API error
+      speakText(cleanText, langCode, onEnd);
+      return {
+        provider: 'browser',
+        error: data.error || `Speech synthesis error (HTTP ${res.status})`,
+      };
+    }
+
+    const mime = data.mimeType || 'audio/wav';
+    const audio = new Audio(`data:${mime};base64,${data.audioBase64}`);
+    activeAudioElement = audio;
+
+    audio.onended = () => {
+      if (activeAudioElement === audio) {
+        activeAudioElement = null;
+      }
+      if (onEnd) onEnd();
+    };
+
+    audio.onerror = () => {
+      if (activeAudioElement === audio) {
+        activeAudioElement = null;
+      }
+      speakText(cleanText, langCode, onEnd);
+    };
+
+    await audio.play();
+    return { provider: 'gemini-tts' };
+  } catch (err) {
+    speakText(cleanText, langCode, onEnd);
+    return {
+      provider: 'browser',
+      error: err instanceof Error ? err.message : 'TTS playback error',
+    };
+  }
 }
