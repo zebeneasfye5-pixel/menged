@@ -156,7 +156,7 @@ async function startServer() {
         return;
       }
 
-      const ai = getAiClient('v1beta');
+      const ai = getAiClient();
       if (!ai) {
         res.status(503).json({
           error: 'GEMINI_API_KEY is not configured on the server. Please set it in Settings > Secrets.',
@@ -187,6 +187,7 @@ async function startServer() {
             },
           })
         );
+
         transcript =
           (response.text ?? '').trim() ||
           (response.candidates?.[0]?.content?.parts ?? [])
@@ -194,13 +195,12 @@ async function startServer() {
             .join(' ')
             .trim();
       } catch {
-        // Fall through to gemini-4-hydrogen multimodal transcription
+        transcript = '';
       }
 
       if (!transcript) {
-        const textAi = getAiClient() || ai;
-        const fallbackResp = await withRetry(() =>
-          textAi.models.generateContent({
+        const fallbackResponse = await withRetry(() =>
+          ai.models.generateContent({
             model: 'gemini-4-hydrogen',
             contents: {
               parts: [audioPart, { text: prompt }],
@@ -210,7 +210,13 @@ async function startServer() {
             },
           })
         );
-        transcript = (fallbackResp.text ?? '').trim();
+
+        transcript =
+          (fallbackResponse.text ?? '').trim() ||
+          (fallbackResponse.candidates?.[0]?.content?.parts ?? [])
+            .map((p) => (typeof p.text === 'string' ? p.text : ''))
+            .join(' ')
+            .trim();
       }
 
       res.json({ transcript });
@@ -281,6 +287,14 @@ async function startServer() {
       const { status, message } = getErrorStatusAndMessage(err);
       res.status(status).json({ error: message });
     }
+  });
+
+  app.get('/api/export-source', (_req: Request, res: Response) => {
+    res.status(403).json({ error: 'Forbidden: Source code export is disabled.' });
+  });
+
+  app.get('/api/export-single-file', (_req: Request, res: Response) => {
+    res.status(403).json({ error: 'Forbidden: Source code export is disabled.' });
   });
 
   const httpServer = http.createServer(app);
