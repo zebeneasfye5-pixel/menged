@@ -16,8 +16,11 @@ import {
   Volume2,
   Ticket,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Lock,
+  LogIn
 } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { Language, QueueTurn, SafetyReport, TransportRoute, Vehicle } from '../types';
 import { translations } from '../data/translations';
 import { speakText } from '../utils/audio';
@@ -34,6 +37,9 @@ interface DashboardOverviewProps {
   onRoleChange?: (role: 'user' | 'inspector') => void;
   onOpenShareModal?: () => void;
   onOpenContractModal?: () => void;
+  cloudUser?: FirebaseUser | null;
+  isAuthorizedAdmin?: boolean;
+  onCloudSignIn?: () => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -48,12 +54,28 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onRoleChange,
   onOpenShareModal,
   onOpenContractModal,
+  cloudUser = null,
+  isAuthorizedAdmin = false,
+  onCloudSignIn,
 }) => {
   const t = translations[currentLang];
   const [internalRole, setInternalRole] = useState<'user' | 'inspector'>(activeRole);
+  const [showInspectorAuthNotice, setShowInspectorAuthNotice] = useState<boolean>(false);
 
-  const currentRole = onRoleChange ? activeRole : internalRole;
+  const canAccessInspector = Boolean(cloudUser && isAuthorizedAdmin);
+  const requestedRole = onRoleChange ? activeRole : internalRole;
+  const currentRole: 'user' | 'inspector' =
+    requestedRole === 'inspector' && canAccessInspector ? 'inspector' : 'user';
+
   const setRole = (role: 'user' | 'inspector') => {
+    if (role === 'inspector' && !canAccessInspector) {
+      setShowInspectorAuthNotice(true);
+      if (onRoleChange) {
+        onRoleChange('inspector');
+      }
+      return;
+    }
+    setShowInspectorAuthNotice(false);
     setInternalRole(role);
     if (onRoleChange) onRoleChange(role);
   };
@@ -159,11 +181,41 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <ShieldAlert className="w-4 h-4" />
+            {canAccessInspector ? <ShieldAlert className="w-4 h-4" /> : <Lock className="w-4 h-4 text-amber-400" />}
             <span>የተቆጣጣሪና ባለስልጣን ዳሽቦርድ (Inspector/Command)</span>
           </button>
         </div>
       </div>
+
+      {/* Authorized Inspector Sign-In Prompt (if standalone notice is active) */}
+      {showInspectorAuthNotice && !canAccessInspector && (
+        <div className="bg-slate-900/95 border border-cyan-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-cyan-500/15 text-cyan-400 rounded-xl shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-bold text-white">
+                የተቆጣጣሪና ባለስልጣን መቆጣጠሪያ ክፍል ፍቃድ ይፈልጋል
+              </p>
+              <p className="text-slate-300">
+                {cloudUser
+                  ? `የገቡበት አካውንት (${cloudUser.email}) የተፈቀደለት የባለስልጣን ተቆጣጣሪ አይደለም። በተፈቀደ የGoogle አካውንት ይግቡ።`
+                  : 'የትራንስፖርት ባለስልጣን ተቆጣጣሪ መቆጣጠሪያዎችን ለመክፈት በተፈቀደ የGoogle አካውንት ይግቡ።'}
+              </p>
+            </div>
+          </div>
+          {onCloudSignIn && (
+            <button
+              onClick={onCloudSignIn}
+              className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white font-bold rounded-xl flex items-center gap-2 shrink-0 shadow"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>በGoogle ግባ (Authorized Inspector)</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* =========================================================================
           VIEW 1: USER / CITIZEN DASHBOARD (የተጠቃሚና የመንገደኛ ዳሽቦርድ)
@@ -441,7 +493,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* =========================================================================
           VIEW 2: INSPECTOR & AUTHORITY COMMAND DASHBOARD (የተቆጣጣሪና ባለስልጣን ዳሽቦርድ)
          ========================================================================= */}
-      {currentRole === 'inspector' && (
+      {currentRole === 'inspector' && canAccessInspector && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Authority Command Header (Right side clean) */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-cyan-950/50 to-slate-950 border border-cyan-500/40 p-6 sm:p-7 shadow-2xl">

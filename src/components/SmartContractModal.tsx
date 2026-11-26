@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { 
   FileCheck2, 
   ShieldCheck, 
@@ -12,17 +13,20 @@ import {
   Lock
 } from 'lucide-react';
 import { playSuccessTone, speakText } from '../utils/audio';
+import { loadSignedContract, saveSignedContract } from '../utils/cloudSync';
 
 interface SmartContractModalProps {
   isOpen: boolean;
   onClose: () => void;
   audioAlertsEnabled: boolean;
+  cloudUser?: FirebaseUser | null;
 }
 
 export const SmartContractModal: React.FC<SmartContractModalProps> = ({
   isOpen,
   onClose,
   audioAlertsEnabled,
+  cloudUser = null,
 }) => {
   const [developerName, setDeveloperName] = useState('Senior Software Engineering Architect');
   const [authorityOfficial, setAuthorityOfficial] = useState('አቶ ዘበነ አስፋው (የባለስልጣኑ ዋና ዳይሬክተር)');
@@ -36,7 +40,36 @@ export const SmartContractModal: React.FC<SmartContractModalProps> = ({
     return true;
   });
 
-  const handleSignContract = () => {
+  useEffect(() => {
+    if (!isOpen || !cloudUser || !cloudUser.emailVerified) return;
+    let active = true;
+
+    void (async () => {
+      try {
+        const record = await loadSignedContract(cloudUser);
+        if (!active || !record) return;
+        if (record.developerName) setDeveloperName(record.developerName);
+        if (record.authorityOfficial) setAuthorityOfficial(record.authorityOfficial);
+        if (record.contractDate) setContractDate(record.contractDate);
+        if (typeof record.contractValueBirr === 'number') setContractValueBirr(record.contractValueBirr);
+        if (typeof record.warrantyMonths === 'number') setWarrantyMonths(record.warrantyMonths);
+        if (record.isSigned) {
+          setIsSigned(true);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('transport_et_contract_signed', 'true');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load contract from Firestore:', err);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, cloudUser]);
+
+  const handleSignContract = async () => {
     setIsSigned(true);
     if (typeof window !== 'undefined') {
       localStorage.setItem('transport_et_contract_signed', 'true');
@@ -45,6 +78,21 @@ export const SmartContractModal: React.FC<SmartContractModalProps> = ({
       playSuccessTone();
     }
     speakText('ስማርት የውል ስምምነቱ በሁለቱም ወገኖች በዲጂታል ፊርማ ጸድቆ ተረጋግጧል!', 'am');
+
+    if (cloudUser && cloudUser.emailVerified) {
+      try {
+        await saveSignedContract(cloudUser, {
+          developerName,
+          authorityOfficial,
+          contractDate,
+          contractValueBirr,
+          warrantyMonths,
+          isSigned: true,
+        });
+      } catch (err) {
+        console.error('Failed to persist signed contract to Firestore:', err);
+      }
+    }
   };
 
   if (!isOpen) return null;

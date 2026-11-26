@@ -50,9 +50,117 @@ function safeUrlOrEmpty(val: unknown, maxLen = 500): string {
   return val.slice(0, maxLen);
 }
 
+export const CONTRACT_DOC_ID = 'CNT-TECH-2026-0048';
+
+export interface SmartContractRecord {
+  id: string;
+  developerName: string;
+  authorityOfficial: string;
+  contractDate: string;
+  contractValueBirr: number;
+  warrantyMonths: number;
+  isSigned: boolean;
+}
+
 export function isVerifiedAdmin(user: User | null): boolean {
   if (!user || !user.emailVerified) return false;
   return user.email === BOOTSTRAPPED_ADMIN_EMAIL;
+}
+
+export async function checkIsAdminUser(user: User | null): Promise<boolean> {
+  if (!user || !user.emailVerified) return false;
+  if (user.email === BOOTSTRAPPED_ADMIN_EMAIL) return true;
+
+  const path = `admins/${user.uid}`;
+  try {
+    const adminSnap = await getDoc(doc(db, 'admins', sanitizeId(user.uid)));
+    return adminSnap.exists();
+  } catch (error) {
+    console.warn(`Admin allowlist check failed for ${path}:`, error);
+    return false;
+  }
+}
+
+export async function loadSignedContract(user: User | null): Promise<SmartContractRecord | null> {
+  if (!user || !user.emailVerified) return null;
+  const path = 'contracts';
+  try {
+    const isAdmin = await checkIsAdminUser(user);
+    const q = isAdmin
+      ? query(collection(db, 'contracts'), where('id', '==', CONTRACT_DOC_ID))
+      : query(collection(db, 'contracts'), where('createdBy', '==', user.uid));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const matched = snap.docs.find((d) => d.id === CONTRACT_DOC_ID) || snap.docs[0];
+    return matched.data() as SmartContractRecord;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+export async function saveSignedContract(
+  user: User,
+  contract: Omit<SmartContractRecord, 'id'>
+): Promise<void> {
+  if (!user.emailVerified) return;
+  const isAdmin = await checkIsAdminUser(user);
+  const docId = isAdmin ? CONTRACT_DOC_ID : sanitizeId(`${CONTRACT_DOC_ID}_${user.uid}`);
+  const path = `contracts/${docId}`;
+
+  try {
+    const q = isAdmin
+      ? query(collection(db, 'contracts'), where('id', '==', docId))
+      : query(collection(db, 'contracts'), where('createdBy', '==', user.uid));
+    const snap = await getDocs(q);
+    const existingDoc = snap.docs.find((d) => d.id === docId);
+
+    if (!existingDoc) {
+      await setDoc(doc(db, 'contracts', docId), {
+        id: docId,
+        developerName: clampStr(contract.developerName, 160, 'Developer') || 'Developer',
+        authorityOfficial: clampStr(contract.authorityOfficial, 160, 'Authority') || 'Authority',
+        contractDate: clampStr(contract.contractDate, 40),
+        contractValueBirr: Math.max(0, Number(contract.contractValueBirr ?? 0)),
+        warrantyMonths: Math.max(0, Number(contract.warrantyMonths ?? 0)),
+        isSigned: Boolean(contract.isSigned),
+        createdBy: sanitizeId(user.uid),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const existingData = existingDoc.data();
+      const ownerUid = typeof existingData.createdBy === 'string' ? existingData.createdBy : user.uid;
+      if (isAdmin) {
+        await setDoc(
+          doc(db, 'contracts', docId),
+          {
+            id: docId,
+            developerName: clampStr(contract.developerName, 160, 'Developer') || 'Developer',
+            authorityOfficial: clampStr(contract.authorityOfficial, 160, 'Authority') || 'Authority',
+            contractDate: clampStr(contract.contractDate, 40),
+            contractValueBirr: Math.max(0, Number(contract.contractValueBirr ?? 0)),
+            warrantyMonths: Math.max(0, Number(contract.warrantyMonths ?? 0)),
+            isSigned: Boolean(contract.isSigned),
+            createdBy: sanitizeId(ownerUid),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else if (ownerUid === user.uid && existingData.isSigned === false) {
+        await setDoc(
+          doc(db, 'contracts', docId),
+          {
+            isSigned: Boolean(contract.isSigned),
+            contractDate: clampStr(contract.contractDate, 40),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
 }
 
 /**
@@ -425,10 +533,11 @@ export function subscribeCloudCollections(
     onPayments: (items: PassengerTicketPayment[]) => void;
     onExitFees: (items: TerminalExitFee[]) => void;
     onSettlements: (items: OwnerSettlement[]) => void;
-  }
+  },
+  isAdminOverride?: boolean
 ): () => void {
   const unsubs: Unsubscribe[] = [];
-  const admin = isVerifiedAdmin(user);
+  const admin = isAdminOverride ?? isVerifiedAdmin(user);
 
   // Publicly operational collections
   unsubs.push(
@@ -567,13 +676,14 @@ export async function syncArrayDiffToFirestore<T extends { id: string }>(
   prevItems: T[],
   nextItems: T[],
   user: User | null,
-  mapper: (item: T, uid: string, isCreate: boolean) => Record<string, unknown>
+  mapper: (item: T, uid: string, isCreate: boolean) => Record<string, unknown>,
+  isAdminOverride?: boolean
 ): Promise<void> {
   if (!user || !user.emailVerified) return;
 
   const prevMap = new Map(prevItems.map((i) => [sanitizeId(i.id), i]));
   const nextMap = new Map(nextItems.map((i) => [sanitizeId(i.id), i]));
-  const admin = isVerifiedAdmin(user);
+  const admin = isAdminOverride ?? isVerifiedAdmin(user);
 
   try {
     // Created or updated items

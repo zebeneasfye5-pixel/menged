@@ -53,6 +53,7 @@ export interface Vehicle {
   lat: number;
   lng: number;
   heading?: number; // 0-359 degrees
+  isLiveHardwareGps?: boolean;
   currentLocationName?: string;
   currentLocationImage?: string;
   trail?: GpsTrailPoint[];

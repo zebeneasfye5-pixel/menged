@@ -46,12 +46,13 @@ import {
   buildRoutePayload,
   buildSettlementPayload,
   buildVehiclePayload,
+  checkIsAdminUser,
   ensureUserProfile,
   seedCloudDatabaseIfEmpty,
   subscribeCloudCollections,
   syncArrayDiffToFirestore,
 } from './utils/cloudSync';
-import { AlertOctagon, WifiOff, X } from 'lucide-react';
+import { AlertOctagon, Lock, LogIn, ShieldAlert, WifiOff, X } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -59,6 +60,7 @@ export default function App() {
   const [audioAlertsEnabled, setAudioAlertsEnabled] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [cloudUser, setCloudUser] = useState<FirebaseUser | null>(null);
+  const [isAuthorizedAdmin, setIsAuthorizedAdmin] = useState<boolean>(false);
 
   // Active Role state: user (ተጠቃሚ/መንገደኛ) vs inspector (ተቆጣጣሪ/ባለስልጣን)
   const [activeRole, setActiveRole] = useState<'user' | 'inspector'>('user');
@@ -67,6 +69,7 @@ export default function App() {
   const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
   const [contractModalOpen, setContractModalOpen] = useState<boolean>(false);
   const [emergencyModalOpen, setEmergencyModalOpen] = useState<boolean>(false);
+  const [inspectorAuthModalOpen, setInspectorAuthModalOpen] = useState<boolean>(false);
 
   // Persistent state collections from StorageService (instant 0ms offline startup + cloud mirror)
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => StorageService.getVehicles());
@@ -109,6 +112,12 @@ export default function App() {
 
       if (user) {
         await ensureUserProfile(user);
+        const adminAuthorized = await checkIsAdminUser(user);
+        setIsAuthorizedAdmin(adminAuthorized);
+        if (!adminAuthorized) {
+          setActiveRole('user');
+        }
+
         await seedCloudDatabaseIfEmpty(user, {
           vehicles: StorageService.getVehicles(),
           drivers: StorageService.getDrivers(),
@@ -121,51 +130,75 @@ export default function App() {
           settlements: StorageService.getSettlements(),
         });
 
-        unsubscribeCollections = subscribeCloudCollections(user, {
-          onVehicles: (cloudVehicles) => {
-            setVehicles((prev) => {
-              const prevMap = new Map<string, Vehicle>(prev.map((p) => [p.id, p]));
-              const merged = cloudVehicles.map((cv) => ({
-                ...cv,
-                trail: prevMap.get(cv.id)?.trail || cv.trail,
-              }));
-              StorageService.saveVehicles(merged);
-              return merged;
-            });
+        unsubscribeCollections = subscribeCloudCollections(
+          user,
+          {
+            onVehicles: (cloudVehicles) => {
+              setVehicles((prev) => {
+                const prevMap = new Map<string, Vehicle>(prev.map((p) => [p.id, p]));
+                const merged = cloudVehicles.map((cv) => {
+                  const localPrev = prevMap.get(cv.id);
+                  if (localPrev?.isLiveHardwareGps) {
+                    return {
+                      ...cv,
+                      lat: localPrev.lat,
+                      lng: localPrev.lng,
+                      heading: localPrev.heading,
+                      currentSpeed: localPrev.currentSpeed,
+                      currentLocationName: localPrev.currentLocationName,
+                      currentLocationImage: localPrev.currentLocationImage,
+                      lastUpdate: localPrev.lastUpdate,
+                      isLiveHardwareGps: true,
+                      trail: localPrev.trail || cv.trail,
+                    };
+                  }
+                  return {
+                    ...cv,
+                    trail: localPrev?.trail || cv.trail,
+                  };
+                });
+                StorageService.saveVehicles(merged);
+                return merged;
+              });
+            },
+            onQueues: (items) => {
+              setQueues(items);
+              StorageService.saveQueues(items);
+            },
+            onRoutes: (items) => {
+              setRoutes(items);
+              StorageService.saveRoutes(items);
+            },
+            onDrivers: (items) => {
+              setDrivers(items);
+              StorageService.saveDrivers(items);
+            },
+            onOwners: (items) => {
+              setOwners(items);
+              StorageService.saveOwners(items);
+            },
+            onReports: (items) => {
+              setSafetyReports(items);
+              StorageService.saveReports(items);
+            },
+            onPayments: (items) => {
+              setPayments(items);
+              StorageService.savePayments(items);
+            },
+            onExitFees: (items) => {
+              setExitFees(items);
+              StorageService.saveExitFees(items);
+            },
+            onSettlements: (items) => {
+              setSettlements(items);
+              StorageService.saveSettlements(items);
+            },
           },
-          onQueues: (items) => {
-            setQueues(items);
-            StorageService.saveQueues(items);
-          },
-          onRoutes: (items) => {
-            setRoutes(items);
-            StorageService.saveRoutes(items);
-          },
-          onDrivers: (items) => {
-            setDrivers(items);
-            StorageService.saveDrivers(items);
-          },
-          onOwners: (items) => {
-            setOwners(items);
-            StorageService.saveOwners(items);
-          },
-          onReports: (items) => {
-            setSafetyReports(items);
-            StorageService.saveReports(items);
-          },
-          onPayments: (items) => {
-            setPayments(items);
-            StorageService.savePayments(items);
-          },
-          onExitFees: (items) => {
-            setExitFees(items);
-            StorageService.saveExitFees(items);
-          },
-          onSettlements: (items) => {
-            setSettlements(items);
-            StorageService.saveSettlements(items);
-          },
-        });
+          adminAuthorized
+        );
+      } else {
+        setIsAuthorizedAdmin(false);
+        setActiveRole('user');
       }
     });
 
@@ -193,68 +226,91 @@ export default function App() {
     }
   };
 
+  const handleRoleChange = (role: 'user' | 'inspector') => {
+    if (role === 'user') {
+      setActiveRole('user');
+      setInspectorAuthModalOpen(false);
+      return;
+    }
+
+    if (cloudUser && isAuthorizedAdmin) {
+      setActiveRole('inspector');
+      setInspectorAuthModalOpen(false);
+    } else {
+      setActiveRole('user');
+      setInspectorAuthModalOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    if (cloudUser && isAuthorizedAdmin && inspectorAuthModalOpen) {
+      setInspectorAuthModalOpen(false);
+      setActiveRole('inspector');
+    }
+  }, [cloudUser, isAuthorizedAdmin, inspectorAuthModalOpen]);
+
   // Update handlers with local persistence + automatic background Firestore cloud sync
   const handleUpdateVehicles = (updated: Vehicle[]) => {
     const prev = vehicles;
     setVehicles(updated);
     StorageService.saveVehicles(updated);
-    void syncArrayDiffToFirestore('vehicles', prev, updated, cloudUser, buildVehiclePayload);
+    void syncArrayDiffToFirestore('vehicles', prev, updated, cloudUser, buildVehiclePayload, isAuthorizedAdmin);
   };
 
   const handleUpdateDrivers = (updated: Driver[]) => {
     const prev = drivers;
     setDrivers(updated);
     StorageService.saveDrivers(updated);
-    void syncArrayDiffToFirestore('drivers', prev, updated, cloudUser, buildDriverPayload);
+    void syncArrayDiffToFirestore('drivers', prev, updated, cloudUser, buildDriverPayload, isAuthorizedAdmin);
   };
 
   const handleUpdateOwners = (updated: Owner[]) => {
     const prev = owners;
     setOwners(updated);
     StorageService.saveOwners(updated);
-    void syncArrayDiffToFirestore('owners', prev, updated, cloudUser, buildOwnerPayload);
+    void syncArrayDiffToFirestore('owners', prev, updated, cloudUser, buildOwnerPayload, isAuthorizedAdmin);
   };
 
   const handleUpdateQueues = (updated: QueueTurn[]) => {
     const prev = queues;
     setQueues(updated);
     StorageService.saveQueues(updated);
-    void syncArrayDiffToFirestore('queues', prev, updated, cloudUser, buildQueuePayload);
+    void syncArrayDiffToFirestore('queues', prev, updated, cloudUser, buildQueuePayload, isAuthorizedAdmin);
   };
 
   const handleUpdateRoutes = (updated: TransportRoute[]) => {
     const prev = routes;
     setRoutes(updated);
     StorageService.saveRoutes(updated);
-    void syncArrayDiffToFirestore('routes', prev, updated, cloudUser, buildRoutePayload);
+    void syncArrayDiffToFirestore('routes', prev, updated, cloudUser, buildRoutePayload, isAuthorizedAdmin);
   };
 
   const handleUpdateReports = (updated: SafetyReport[]) => {
     const prev = safetyReports;
     setSafetyReports(updated);
     StorageService.saveReports(updated);
-    void syncArrayDiffToFirestore('safetyReports', prev, updated, cloudUser, buildReportPayload);
+    void syncArrayDiffToFirestore('safetyReports', prev, updated, cloudUser, buildReportPayload, isAuthorizedAdmin);
   };
 
   const handleUpdatePayments = (updated: PassengerTicketPayment[]) => {
     const prev = payments;
     setPayments(updated);
     StorageService.savePayments(updated);
-    void syncArrayDiffToFirestore('payments', prev, updated, cloudUser, buildPaymentPayload);
+    void syncArrayDiffToFirestore('payments', prev, updated, cloudUser, buildPaymentPayload, isAuthorizedAdmin);
   };
 
   const handleUpdateExitFees = (updated: TerminalExitFee[]) => {
     const prev = exitFees;
     setExitFees(updated);
     StorageService.saveExitFees(updated);
-    void syncArrayDiffToFirestore('exitFees', prev, updated, cloudUser, buildExitFeePayload);
+    void syncArrayDiffToFirestore('exitFees', prev, updated, cloudUser, buildExitFeePayload, isAuthorizedAdmin);
   };
 
   const handleUpdateSettlements = (updated: OwnerSettlement[]) => {
     const prev = settlements;
     setSettlements(updated);
     StorageService.saveSettlements(updated);
-    void syncArrayDiffToFirestore('settlements', prev, updated, cloudUser, buildSettlementPayload);
+    void syncArrayDiffToFirestore('settlements', prev, updated, cloudUser, buildSettlementPayload, isAuthorizedAdmin);
   };
 
   // Direct hardware / manual position update for a specific vehicle
@@ -283,6 +339,7 @@ export default function App() {
         return {
           ...v,
           status: 'on_route' as const,
+          isLiveHardwareGps: true,
           lat: Number(lat.toFixed(5)),
           lng: Number(lng.toFixed(5)),
           heading: bearing.degrees,
@@ -308,7 +365,7 @@ export default function App() {
 
       setVehicles((prev) =>
         prev.map((v) => {
-          if (v.status !== 'on_route') return v;
+          if (v.status !== 'on_route' || v.isLiveHardwareGps === true) return v;
 
           // Move smoothly along corridor towards destination (or return loop)
           const destPlace = findDestinationCoords(v.destination);
@@ -402,7 +459,7 @@ export default function App() {
         emergencyCount={emergencyCount}
         onTriggerEmergency={handleTriggerEmergency}
         activeRole={activeRole}
-        onRoleChange={setActiveRole}
+        onRoleChange={handleRoleChange}
         onOpenShareModal={() => setShareModalOpen(true)}
         onOpenContractModal={() => setContractModalOpen(true)}
         cloudUser={cloudUser}
@@ -434,9 +491,12 @@ export default function App() {
               onNavigateTab={setCurrentTab}
               audioAlertsEnabled={audioAlertsEnabled}
               activeRole={activeRole}
-              onRoleChange={setActiveRole}
+              onRoleChange={handleRoleChange}
               onOpenShareModal={() => setShareModalOpen(true)}
               onOpenContractModal={() => setContractModalOpen(true)}
+              cloudUser={cloudUser}
+              isAuthorizedAdmin={isAuthorizedAdmin}
+              onCloudSignIn={handleCloudSignIn}
             />
           )}
 
@@ -572,7 +632,69 @@ export default function App() {
         isOpen={contractModalOpen}
         onClose={() => setContractModalOpen(false)}
         audioAlertsEnabled={audioAlertsEnabled}
+        cloudUser={cloudUser}
       />
+
+      {/* Authorized Inspector Sign-In Prompt Modal */}
+      {inspectorAuthModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl space-y-5">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-cyan-500/20 text-cyan-400 rounded-2xl">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white">
+                    የተቆጣጣሪና ባለስልጣን መግቢያ ማረጋገጫ
+                  </h3>
+                  <p className="text-xs text-cyan-300">Authority Inspector Authentication Required</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectorAuthModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <div className="p-3.5 bg-slate-800/80 border border-slate-700 rounded-2xl flex items-start gap-2.5">
+                <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-white">
+                    {cloudUser
+                      ? 'ይህ አካውንት የተቆጣጣሪ ፍቃድ የለውም'
+                      : 'የGoogle መግቢያ ያስፈልጋል'}
+                  </p>
+                  <p>
+                    {cloudUser
+                      ? `አሁን የገቡበት (${cloudUser.email}) የባለስልጣን ተቆጣጣሪ ዝርዝር ውስጥ አይገኝም። እባክዎ በተፈቀደለት የባለስልጣን Google አካውንት ይግቡ።`
+                      : 'የተቆጣጣሪና ባለስልጣን መቆጣጠሪያ ክፍልን (Inspector Command) ለመክፈት እባክዎ በተፈቀደለት የባለስልጣን Google አካውንት ይግቡ።'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setInspectorAuthModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+              >
+                ዝጋ (Close)
+              </button>
+              <button
+                onClick={() => void handleCloudSignIn()}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white font-bold rounded-xl text-xs shadow-lg flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>በGoogle ግባ (Sign in as Inspector)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Emergency SOS Protocol Modal */}
       {emergencyModalOpen && (
